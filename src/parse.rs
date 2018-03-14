@@ -1,40 +1,50 @@
+use std::{i32, i64};
 use std::str::{self, FromStr};
 
+use failure::Error;
 use nom::{self, ErrorKind, IResult};
+use parity_wasm::elements::{NameMap, ValueType};
 
 use errors::WastError;
 
-pub trait Parse
-where
-    Self: Sized,
-{
-    fn parse(s: &[u8]) -> IResult<&[u8], Self>;
-}
-
 /// num:    <digit> (_? <digit>)*
 named!(
-    pub num<usize>,
-    map_res!(map_res!(recognize!(separated_nonempty_list_complete!(
+    pub num<String>,
+    map!(map_res!(recognize!(separated_nonempty_list_complete!(
         tag!("_"),
         nom::digit
-    )), str::from_utf8), |s: &str| usize::from_str_radix(&s.replace("_", ""), 10))
+    )), str::from_utf8), |s: &str| s.replace("_", ""))
 );
 
 /// hexnum: <hexdigit> (_? <hexdigit>)*
 named!(
-    pub hexnum<usize>,
-    map_res!(map_res!(recognize!(separated_nonempty_list_complete!(
+    pub hexnum<String>,
+    map!(map_res!(recognize!(separated_nonempty_list_complete!(
         tag!("_"),
         nom::hex_digit
-    )), str::from_utf8), |s: &str| usize::from_str_radix(&s.replace("_", ""), 16))
+    )), str::from_utf8), |s: &str| s.replace("_", ""))
 );
 
 /// nat:    <num> | 0x<hexnum>
 named!(
-    pub nat<usize>,
+    pub nat<isize>,
     alt_complete!(
-        preceded!(tag!("0x"), hexnum) |
-        num
+        preceded!(
+            tag!("0x"),
+            map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16))
+        ) |
+        map_res!(num, |s: String| isize::from_str_radix(&s, 10))
+    )
+);
+
+named!(
+    pub nat32<i32>,
+    alt_complete!(
+        preceded!(
+            tag!("0x"),
+            map_res!(hexnum, |s: String| i32::from_str_radix(&s, 16))
+        ) |
+        map_res!(num, |s: String| i32::from_str_radix(&s, 10))
     )
 );
 
@@ -42,12 +52,22 @@ named!(
 named!(
     pub int<isize>,
     alt_complete!(
-        map!(preceded!(tag!("+"), nat), |n| n as isize) |
-        map_res!(preceded!(tag!("-"), nat), |n| {
-            (n as isize).checked_neg().ok_or_else(|| WastError::OutOfRange(n as isize))
+        preceded!(tag!("+"), nat) |
+        map_res!(preceded!(tag!("-"), nat), |n: isize| {
+            n.checked_neg().ok_or_else(|| WastError::OutOfRange(n))
         }) |
-        map!(nat, |n| n as isize)
+        nat
     )
+);
+
+named!(
+    pub int32<i32>,
+    map!(verify!(int, |n| i32::MIN as isize <= n && n <= i32::MAX as isize), |n| n as i32)
+);
+
+named!(
+    pub int64<i64>,
+    map!(verify!(int, |n| i64::MIN as isize <= n && n <= i64::MAX as isize), |n| n as i64)
 );
 
 /// float:  <num>.<num>?(e|E <num>)? | 0x<hexnum>.<hexnum>?(p|P <num>)?
@@ -57,25 +77,33 @@ named!(
         preceded!(
             tag!("0x"),
             tuple!(
-                hexnum,
+                map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)),
                 opt!(tag!(".")),
-                opt!(complete!(hexnum)),
+                opt!(complete!(map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)))),
                 opt!(complete!(preceded!(tag_no_case!("p"), num)))
             )
         ) |
         tuple!(
-            num,
+            map_res!(num, |s: String| isize::from_str(&s)),
             opt!(tag!(".")),
-            opt!(complete!(num)),
+            opt!(complete!(map_res!(num, |s: String| isize::from_str(&s)))),
             opt!(complete!(preceded!(tag_no_case!("e"), num)))
         )
-    )), |(sign, (num, _, frac, exp)): (Option<&str>, (usize, _, Option<usize>, Option<usize>))| {
-        format!("{}{}.{}e{}", sign.unwrap_or_default(), num, frac.unwrap_or_default(), exp.unwrap_or_default())
+    )), |(sign, (num, _, frac, exp)): (Option<&str>, (isize, _, Option<isize>, Option<String>))| {
+        format!("{}{}.{}e{}", sign.unwrap_or_default(), num, frac.unwrap_or(0), exp.unwrap_or("0".to_owned()))
     })
 );
 
-named!(pub float32<f32>, map_res!(float, |s: String| f32::from_str(&s)));
-named!(pub float64<f64>, map_res!(float, |s: String| f64::from_str(&s)));
+named!(pub float32<f32>, map_res!(float, |s: String| {
+    trace!("parsing f32: {}", s);
+
+    f32::from_str(&s)
+}));
+named!(pub float64<f64>, map_res!(float, |s: String| {
+    trace!("parsing f64: {}", s);
+
+    f64::from_str(&s)
+}));
 
 named!(
     sign<&str>,
@@ -159,52 +187,83 @@ named!(
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Var {
-    Value(usize),
+    Index(u32),
     Name(String),
 }
 
 impl Var {
-    /// var:    <nat> | <name>
-    named!(
-        parse<Self>,
-        alt!(
-        nat => { |v| Var::Value(v) } |
-        name => { |v: &str| Var::Name(v.to_owned()) }
-    )
-    );
+    pub fn resolve_ref(&self, vars: &NameMap) -> Result<u32, Error> {
+        match *self {
+            Var::Index(index) => Ok(index),
+            Var::Name(ref value) => vars.iter()
+                .find(|&(_, name)| name == value)
+                .map(|(idx, _)| idx)
+                .ok_or_else(|| WastError::NotFound(value.to_owned()).into()),
+        }
+    }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Offset(usize);
-
-impl Offset {
-    /// offset: offset=<nat>
-    named!(
-        parse<Self>,
-        map!(preceded!(tag!("offset="), nat), |n| Offset(n))
-    );
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Align(usize);
-
-impl Align {
-    /// align: align=(1|2|4|8|...)
-    named!(
-        parse<Self>,
-        map!(preceded!(tag!("align="), num), |n| Align(n))
-    );
-}
-
-/// val_type: i32 | i64 | f32 | f64
+/// var:    <nat> | <name>
 named!(
-    val_type,
-    alt!(tag!("i32") | tag!("i64") | tag!("f32") | tag!("f64"))
+    pub var<Var>,
+        alt!(
+        name => { |v: &str| Var::Name(v.to_owned()) } |
+        nat => { |v| Var::Index(v as u32) }
+    )
 );
 
-named!(int_type, alt!(tag!("i32") | tag!("i64")));
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Offset(i32);
 
-named!(float_type, alt!(tag!("f32") | tag!("f64")));
+/// offset: offset=<nat>
+named!(
+    offset<Offset>,
+    map!(preceded!(tag!("offset="), nat32), |n| Offset(n))
+);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Align(isize);
+
+/// align: align=(1|2|4|8|...)
+named!(
+    align<Align>,
+    map!(
+        preceded!(
+            tag!("align="),
+            verify!(nat, |n: isize| (n as usize).is_power_of_two())
+        ),
+        Align
+    )
+);
+
+/// value_type: i32 | i64 | f32 | f64
+named!(
+    pub value_type<ValueType>,
+    alt!(
+        tag!("i32") => { |_| ValueType::I32 } |
+        tag!("i64") => { |_| ValueType::I64 } |
+        tag!("f32") => { |_| ValueType::F32 } |
+        tag!("f64") => { |_| ValueType::F64 }
+    )
+);
+
+named!(pub value_type_list<Vec<ValueType>>, ws!(many0!(value_type)));
+
+named!(
+    pub int_type<ValueType>,
+    alt!(
+        tag!("i32") => { |_| ValueType::I32 } |
+        tag!("i64") => { |_| ValueType::I64 }
+    )
+);
+
+named!(
+    pub float_type<ValueType>,
+    alt!(
+        tag!("f32") => { |_| ValueType::F32 } |
+        tag!("f64") => { |_| ValueType::F64 }
+    )
+);
 
 named!(
     mem_size<usize>,
@@ -214,7 +273,7 @@ named!(
     )
 );
 
-named!(pub const_type, recognize!(pair!(val_type, tag!(".const"))));
+named!(pub const_type, recognize!(pair!(value_type, tag!(".const"))));
 
 #[cfg(test)]
 mod tests {
@@ -226,126 +285,198 @@ mod tests {
 
     #[test]
     fn parse_number() {
-        assert_eq!(num(b"123"), IResult::Done(&[][..], 123));
-        assert_eq!(num(b"123_456 abc"), IResult::Done(&b" abc"[..], 123_456));
-        assert_eq!(num(b"123_456_abc"), IResult::Done(&b"_abc"[..], 123_456));
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"123", IResult::Done(&[][..], "123".to_owned())),
+            (
+                b"123_456 abc",
+                IResult::Done(&b" abc"[..], "123456".to_owned()),
+            ),
+            (
+                b"123_456_abc",
+                IResult::Done(&b"_abc"[..], "123456".to_owned()),
+            ),
+            (b"", IResult::Error(ErrorKind::Complete)),
+        ];
 
-        assert_eq!(num(b""), IResult::Error(ErrorKind::Complete));
+        for (code, ref result) in tests {
+            assert_eq!(num(code), *result, "parse num: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 
     #[test]
-    fn parse_hex_number() {
-        assert_eq!(hexnum(b"123"), IResult::Done(&[][..], 0x123));
-        assert_eq!(
-            hexnum(b"123_456 abc"),
-            IResult::Done(&b" abc"[..], 0x123_456)
-        );
-        assert_eq!(
-            hexnum(b"123_456_abc"),
-            IResult::Done(&b""[..], 0x123_456_abc)
-        );
+    fn parse_hexnum() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"123", IResult::Done(&[][..], "123".to_owned())),
+            (
+                b"123_456 abc",
+                IResult::Done(&b" abc"[..], "123456".to_owned()),
+            ),
+            (
+                b"123_456_abc",
+                IResult::Done(&b""[..], "123456abc".to_owned()),
+            ),
+            (b"", IResult::Error(ErrorKind::Complete)),
+        ];
 
-        assert_eq!(hexnum(b""), IResult::Error(ErrorKind::Complete));
+        for (code, ref result) in tests {
+            assert_eq!(hexnum(code), *result, "parse hexnum: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 
     #[test]
     fn parse_nat() {
-        assert_eq!(nat(b"123"), IResult::Done(&[][..], 123));
-        assert_eq!(nat(b"123_456 abc"), IResult::Done(&b" abc"[..], 123_456));
-        assert_eq!(
-            nat(b"0x123_456_abc"),
-            IResult::Done(&b""[..], 0x123_456_abc)
-        );
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"123", IResult::Done(&[][..], 123)),
+            (b"123_456 abc", IResult::Done(&b" abc"[..], 123_456)),
+            (b"0x123_456_abc", IResult::Done(&b""[..], 0x123_456_abc)),
+            (b"", IResult::Error(ErrorKind::Alt)),
+        ];
 
-        assert_eq!(nat(b""), IResult::Error(ErrorKind::Alt));
+        for (code, ref result) in tests {
+            assert_eq!(nat(code), *result, "parse nat: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 
     #[test]
     fn parse_int() {
-        assert_eq!(int(b"+123"), IResult::Done(&[][..], 123));
-        assert_eq!(int(b"-123_456 abc"), IResult::Done(&b" abc"[..], -123_456));
-        assert_eq!(
-            int(b"0x1234_5678_90ab_cdef").unwrap(),
-            (&b""[..], 0x1234_5678_90ab_cdef)
-        );
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"+123", IResult::Done(&[][..], 123)),
+            (b"-123_456 abc", IResult::Done(&b" abc"[..], -123_456)),
+            (
+                b"0x1234_5678_90ab_cdef",
+                IResult::Done(&b""[..], 0x1234_5678_90ab_cdef),
+            ),
+            (b"", IResult::Error(ErrorKind::Alt)),
+        ];
 
-        assert_eq!(int(b""), IResult::Error(ErrorKind::Alt));
+        for (code, ref result) in tests {
+            assert_eq!(int(code), *result, "parse int: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 
     #[test]
     fn parse_float() {
-        assert_eq!(float64(b"123.456e2"), IResult::Done(&[][..], 123.456e2));
-        assert_eq!(float64(b"123.e2"), IResult::Done(&[][..], 123.0e2));
-        assert_eq!(float64(b"123.456"), IResult::Done(&[][..], 123.456));
-        assert_eq!(float64(b"123."), IResult::Done(&[][..], 123.0));
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"123.456e2", IResult::Done(&[][..], 123.456e2)),
+            (b"123.e2", IResult::Done(&[][..], 123.0e2)),
+            (b"123.456", IResult::Done(&[][..], 123.456)),
+            (b"123.", IResult::Done(&[][..], 123.0)),
+            (b"+123.456e2", IResult::Done(&[][..], 123.456e2)),
+            (b"+123.e2", IResult::Done(&[][..], 123.0e2)),
+            (b"+123.456", IResult::Done(&[][..], 123.456)),
+            (b"+123.", IResult::Done(&[][..], 123.0)),
+            (b"-123.456e2", IResult::Done(&[][..], -123.456e2)),
+            (b"-123.e2", IResult::Done(&[][..], -123.0e2)),
+            (b"-123.456", IResult::Done(&[][..], -123.456)),
+            (b"-123.", IResult::Done(&[][..], -123.0)),
+            (b"0x123.456p2", IResult::Done(&[][..], 29111.1)),
+            (b"0x123.p2", IResult::Done(&[][..], 29100.0)),
+            (b"0x123.456", IResult::Done(&[][..], 291.111)),
+            (b"0x123.", IResult::Done(&[][..], 291.0)),
+            (b"+0x123.456p2", IResult::Done(&[][..], 29111.1)),
+            (b"+0x123.p2", IResult::Done(&[][..], 29100.0)),
+            (b"+0x123.456", IResult::Done(&[][..], 291.111)),
+            (b"+0x123.", IResult::Done(&[][..], 291.0)),
+            (b"-0x123.456p2", IResult::Done(&[][..], -29111.1)),
+            (b"-0x123.p2", IResult::Done(&[][..], -29100.0)),
+            (b"-0x123.456", IResult::Done(&[][..], -291.111)),
+            (b"-0x123.", IResult::Done(&[][..], -291.0)),
+            (b"0x1p127", IResult::Done(&[][..], 1.0e127)),
+            (b"", IResult::Error(ErrorKind::Alt)),
+        ];
 
-        assert_eq!(float64(b"+123.456e2"), IResult::Done(&[][..], 123.456e2));
-        assert_eq!(float64(b"+123.e2"), IResult::Done(&[][..], 123.0e2));
-        assert_eq!(float64(b"+123.456"), IResult::Done(&[][..], 123.456));
-        assert_eq!(float64(b"+123."), IResult::Done(&[][..], 123.0));
-
-        assert_eq!(float64(b"-123.456e2"), IResult::Done(&[][..], -123.456e2));
-        assert_eq!(float64(b"-123.e2"), IResult::Done(&[][..], -123.0e2));
-        assert_eq!(float64(b"-123.456"), IResult::Done(&[][..], -123.456));
-        assert_eq!(float64(b"-123."), IResult::Done(&[][..], -123.0));
-
-        assert_eq!(float64(b"0x123.456p2"), IResult::Done(&[][..], 29111.1));
-        assert_eq!(float64(b"0x123.p2"), IResult::Done(&[][..], 29100.0));
-        assert_eq!(float64(b"0x123.456"), IResult::Done(&[][..], 291.111));
-        assert_eq!(float64(b"0x123."), IResult::Done(&[][..], 291.0));
-
-        assert_eq!(float64(b"+0x123.456p2"), IResult::Done(&[][..], 29111.1));
-        assert_eq!(float64(b"+0x123.p2"), IResult::Done(&[][..], 29100.0));
-        assert_eq!(float64(b"+0x123.456"), IResult::Done(&[][..], 291.111));
-        assert_eq!(float64(b"+0x123."), IResult::Done(&[][..], 291.0));
-
-        assert_eq!(float64(b"-0x123.456p2"), IResult::Done(&[][..], -29111.1));
-        assert_eq!(float64(b"-0x123.p2"), IResult::Done(&[][..], -29100.0));
-        assert_eq!(float64(b"-0x123.456"), IResult::Done(&[][..], -291.111));
-        assert_eq!(float64(b"-0x123."), IResult::Done(&[][..], -291.0));
-
-        assert_eq!(float64(b"0x1p127"), IResult::Done(&[][..], 1.0e127));
-        assert_eq!(float64(b""), IResult::Error(ErrorKind::Alt));
+        for (code, ref result) in tests {
+            assert_eq!(float64(code), *result, "parse float: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 
     #[test]
     fn parse_name() {
-        assert_eq!(name(b"$a"), IResult::Done(&b""[..], "a"));
-        assert_eq!(name(b"$foo bar"), IResult::Done(&b" bar"[..], "foo"));
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"$a", IResult::Done(&b""[..], "a")),
+            (b"$foo bar", IResult::Done(&b" bar"[..], "foo")),
+            (b"", IResult::Incomplete(Needed::Size(1))),
+            (b"$", IResult::Incomplete(Needed::Size(2))),
+            (b"+a", IResult::Error(ErrorKind::Tag)),
+        ];
 
-        assert_eq!(name(b""), IResult::Incomplete(Needed::Size(1)));
-        assert_eq!(name(b"$"), IResult::Incomplete(Needed::Size(2)));
-        assert_eq!(name(b"+a"), IResult::Error(ErrorKind::Tag));
+        for (code, ref result) in tests {
+            assert_eq!(name(code), *result, "parse name: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 
     #[test]
     fn parse_string() {
-        assert_eq!(
-            string(b"\"hello world\""),
-            IResult::Done(&b""[..], "hello world".to_owned())
-        );
-        assert_eq!(
-            string(b"\"hello \\r\\n\\t\\\\\\'\\\"world\""),
-            IResult::Done(&b""[..], "hello \r\n\t\\'\"world".to_owned())
-        );
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"\"hello world\"",
+                IResult::Done(&b""[..], "hello world".to_owned()),
+            ),
+            (
+                b"\"hello \\r\\n\\t\\\\\\'\\\"world\"",
+                IResult::Done(&b""[..], "hello \r\n\t\\'\"world".to_owned()),
+            ),
+            (b"", IResult::Incomplete(Needed::Size(1))),
+        ];
 
-        assert_eq!(string(b""), IResult::Incomplete(Needed::Size(1)));
+        for (code, ref result) in tests {
+            assert_eq!(string(code), *result, "parse string: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 
     #[test]
     fn parse_offset() {
-        assert_eq!(
-            Offset::parse(b"offset=1234"),
-            IResult::Done(&b""[..], Offset(1234))
-        );
-        assert_eq!(
-            Offset::parse(b"offset=0xABCD"),
-            IResult::Done(&b""[..], Offset(0xABCD))
-        );
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"offset=1234", IResult::Done(&b""[..], Offset(1234))),
+            (b"offset=0xABCD", IResult::Done(&b""[..], Offset(0xABCD))),
+        ];
+
+        for (code, ref result) in tests {
+            assert_eq!(offset(code), *result, "parse offset: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_var() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"0", IResult::Done(&b""[..], Var::Index(0))),
+            (
+                b"$done",
+                IResult::Done(&b""[..], Var::Name("done".to_owned())),
+            ),
+        ];
+
+        for (code, ref result) in tests {
+            assert_eq!(var(code), *result, "parse align: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 
     #[test]
     fn parse_align() {
-        assert_eq!(Align::parse(b"align=8"), IResult::Done(&b""[..], Align(8)));
+        let tests: Vec<(&[u8], _)> = vec![(b"align=8", IResult::Done(&b""[..], Align(8)))];
+
+        for (code, ref result) in tests {
+            assert_eq!(align(code), *result, "parse align: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
     }
 }

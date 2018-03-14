@@ -17,3 +17,5 @@ mod errors;
 mod parse;
 mod ops;
 mod module;
+
+pub use errors::WastError;

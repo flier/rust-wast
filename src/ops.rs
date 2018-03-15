@@ -6,8 +6,7 @@ use parity_wasm::elements::NameMap;
 use failure::Error;
 use parity_wasm::elements::{FunctionType, Opcode, Type, ValueType};
 
-use parse::{const_type, value_type, value_type_list, var, Var, float32, float64, int32, int64,
-            nat32};
+use parse::{value_type, value_type_list, var, Var, float32, float64, int32, int64, nat32};
 
 named_args!(
     opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
@@ -29,7 +28,7 @@ named_args!(
         apply!(set_global, types) |
         load |
         store |
-        const_value
+        constant
     )
 );
 
@@ -144,16 +143,6 @@ named!(
         preceded!(tag!("result"), opt!(value_type)),
         tag!(")")
     ))
-);
-
-named!(
-    const_value<Opcode>,
-    ws!(switch!(const_type,
-            b"i32.const" => map!(int32, |n| Opcode::I32Const(n)) |
-            b"i64.const" => map!(int64, |n| Opcode::I64Const(n)) |
-            b"f32.const" => map!(float32, |v| Opcode::F32Const(v as u32)) |
-            b"f64.const" => map!(float64, |v| Opcode::F64Const(v as u64))
-        ))
 );
 
 named_args!(
@@ -290,6 +279,17 @@ named!(
 named!(
     align<u32>,
     map!(preceded!(tag!("align="), nat32), |n| n as u32)
+);
+
+/// <val_type>.const <value>
+named!(
+    constant<Opcode>,
+    ws!(switch!(recognize!(pair!(value_type, tag!(".const"))),
+            b"i32.const" => map!(int32, |n| Opcode::I32Const(n)) |
+            b"i64.const" => map!(int64, |n| Opcode::I64Const(n)) |
+            b"f32.const" => map!(float32, |v| Opcode::F32Const(v as u32)) |
+            b"f64.const" => map!(float64, |v| Opcode::F64Const(v as u64))
+        ))
 );
 
 #[cfg(test)]
@@ -516,35 +516,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_const() {
-        let tests: Vec<(&[u8], _)> = vec![
-            (b"i32.const 0xffffffff", IResult::Error(ErrorKind::Switch)),
-            (
-                b"i32.const -0x80000000",
-                IResult::Done(&[][..], Opcode::I32Const(-0x80000000)),
-            ),
-            (
-                b"i64.const 18446744073709551615",
-                IResult::Error(ErrorKind::Switch),
-            ),
-            (
-                b"i64.const -9223372036854775808",
-                IResult::Error(ErrorKind::Switch),
-            ),
-            (
-                b"f32.const 0x1p127",
-                IResult::Done(&[][..], Opcode::F32Const(0)),
-            ),
-        ];
-
-        for (code, ref result) in tests {
-            assert_eq!(const_value(code), *result, "parse const: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
-        }
-    }
-
-    #[test]
     fn parse_get_local() {
         let tests: Vec<(&[u8], _)> = vec![
             (b"get_local 0", IResult::Done(&[][..], Opcode::GetLocal(0))),
@@ -721,6 +692,35 @@ mod tests {
 
         for &(code, ref result) in tests.iter() {
             assert_eq!(store(code), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_constant() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"i32.const 0xffffffff", IResult::Error(ErrorKind::Switch)),
+            (
+                b"i32.const -0x80000000",
+                IResult::Done(&[][..], Opcode::I32Const(-0x80000000)),
+            ),
+            (
+                b"i64.const 18446744073709551615",
+                IResult::Error(ErrorKind::Switch),
+            ),
+            (
+                b"i64.const -9223372036854775808",
+                IResult::Error(ErrorKind::Switch),
+            ),
+            (
+                b"f32.const 0x1p127",
+                IResult::Done(&[][..], Opcode::F32Const(0)),
+            ),
+        ];
+
+        for (code, ref result) in tests {
+            assert_eq!(constant(code), *result, "parse const: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

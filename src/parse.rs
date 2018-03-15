@@ -233,8 +233,6 @@ named!(
     )
 );
 
-named!(pub const_type, recognize!(pair!(value_type, tag!(".const"))));
-
 #[cfg(test)]
 mod tests {
     use pretty_env_logger;

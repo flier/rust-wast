@@ -44,6 +44,7 @@ named_args!(
         tag!("grow_memory") => { |_| Opcode::GrowMemory(0) } |
 
         constant |
+        test |
         unary |
         binary |
         compare |
@@ -371,24 +372,53 @@ named!(
         ))
 );
 
+// <val_type>.<testop>
+named!(
+    test<Opcode>,
+    switch!(recognize!(tuple!(int_type, tag!("."), testop)),
+        b"i32.eqz" => value!(Opcode::I32Eqz) |
+        b"i64.eqz" => value!(Opcode::I64Eqz)
+    )
+);
+
+named!(testop, tag!("eqz"));
+
 /// <val_type>.<unop>
 named!(
     unary<Opcode>,
     switch!(recognize!(tuple!(int_type, tag!("."), unop)),
-        b"i32.eqz" => value!(Opcode::I32Eqz) |
-        b"i64.eqz" => value!(Opcode::I64Eqz) |
         b"i32.clz" => value!(Opcode::I32Clz) |
         b"i32.ctz" => value!(Opcode::I32Ctz) |
         b"i32.popcnt" => value!(Opcode::I32Popcnt) |
+
         b"i64.clz" => value!(Opcode::I64Clz) |
         b"i64.ctz" => value!(Opcode::I64Ctz) |
-        b"i64.popcnt" => value!(Opcode::I64Popcnt)
+        b"i64.popcnt" => value!(Opcode::I64Popcnt) |
+
+        b"f32.abs" => value!(Opcode::F32Abs) |
+		b"f32.neg" => value!(Opcode::F32Neg) |
+        b"f32.sqrt" => value!(Opcode::F32Sqrt ) |
+		b"f32.ceil" => value!(Opcode::F32Ceil ) |
+		b"f32.floor" => value!(Opcode::F32Floor ) |
+		b"f32.trunc" => value!(Opcode::F32Trunc ) |
+		b"f32.nearest" => value!(Opcode::F32Nearest ) |
+
+        b"f64.abs" => value!(Opcode::F64Abs) |
+		b"f64.neg" => value!(Opcode::F64Neg) |
+		b"f64.sqrt" => value!(Opcode::F64Sqrt ) |
+		b"f64.ceil" => value!(Opcode::F64Ceil ) |
+		b"f64.floor" => value!(Opcode::F64Floor ) |
+		b"f64.trunc" => value!(Opcode::F64Trunc ) |
+		b"f64.nearest" => value!(Opcode::F64Nearest )
     )
 );
 
 named!(
     unop,
-    alt!(tag!("eqz") | tag!("clz") | tag!("ctz") | tag!("popcnt"))
+    alt!(
+        tag!("clz") | tag!("ctz") | tag!("popcnt") | tag!("abs") | tag!("neg") | tag!("sqrt")
+            | tag!("ceil") | tag!("floor") | tag!("trunc") | tag!("nearest")
+    )
 );
 
 /// <val_type>.<binop>
@@ -427,14 +457,6 @@ named!(
 		tag!("i64.rotl") => { |_| Opcode::I64Rotl } |
 		tag!("i64.rotr") => { |_| Opcode::I64Rotr } |
 
-        tag!("f32.abs") => { |_| Opcode::F32Abs } |
-		tag!("f32.neg") => { |_| Opcode::F32Neg } |
-		tag!("f32.ceil") => { |_| Opcode::F32Ceil } |
-		tag!("f32.floor") => { |_| Opcode::F32Floor } |
-		tag!("f32.trunc") => { |_| Opcode::F32Trunc } |
-		tag!("f32.nearest") => { |_| Opcode::F32Nearest } |
-		tag!("f32.sqrt") => { |_| Opcode::F32Sqrt } |
-
 		tag!("f32.add") => { |_| Opcode::F32Add } |
 		tag!("f32.sub") => { |_| Opcode::F32Sub } |
 		tag!("f32.mul") => { |_| Opcode::F32Mul } |
@@ -442,14 +464,6 @@ named!(
 		tag!("f32.min") => { |_| Opcode::F32Min } |
 		tag!("f32.max") => { |_| Opcode::F32Max } |
 		tag!("f32.copysign") => { |_| Opcode::F32Copysign } |
-
-        tag!("f64.abs") => { |_| Opcode::F64Abs } |
-		tag!("f64.neg") => { |_| Opcode::F64Neg } |
-		tag!("f64.ceil") => { |_| Opcode::F64Ceil } |
-		tag!("f64.floor") => { |_| Opcode::F64Floor } |
-		tag!("f64.trunc") => { |_| Opcode::F64Trunc } |
-		tag!("f64.nearest") => { |_| Opcode::F64Nearest } |
-		tag!("f64.sqrt") => { |_| Opcode::F64Sqrt } |
 
 		tag!("f64.add") => { |_| Opcode::F64Add } |
 		tag!("f64.sub") => { |_| Opcode::F64Sub } |

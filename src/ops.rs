@@ -206,23 +206,23 @@ named!(
             map!(opt!(complete!(align)), |n| n.unwrap_or_default()),
             |n: u32| n == 0 || n.is_power_of_two()
         ) >>
-        (match op {
-            b"i32.load" => Opcode::I32Load(align, offset),
-            b"i64.load" => Opcode::I64Load(align, offset),
-            b"f32.load" => Opcode::F32Load(align, offset),
-            b"f64.load" => Opcode::F64Load(align, offset),
-            b"i32.load8_s" => Opcode::I32Load8S(align, offset),
-            b"i32.load8_u" => Opcode::I32Load8U(align, offset),
-            b"i32.load16_s" => Opcode::I32Load16S(align, offset),
-            b"i32.load16_u" => Opcode::I32Load16U(align, offset),
-            b"i64.load8_s" => Opcode::I64Load8S(align, offset),
-            b"i64.load8_u" => Opcode::I64Load8U(align, offset),
-            b"i64.load16_s" => Opcode::I64Load16S(align, offset),
-            b"i64.load16_u" => Opcode::I64Load16U(align, offset),
-            b"i64.load32_s" => Opcode::I64Load32S(align, offset),
-            b"i64.load32_u" => Opcode::I64Load32U(align, offset),
-            _ => unreachable!(),
-        })
+        opcode: switch!(value!(op),
+            b"i32.load" => value!(Opcode::I32Load(align, offset)) |
+            b"i64.load" => value!(Opcode::I64Load(align, offset)) |
+            b"f32.load" => value!(Opcode::F32Load(align, offset)) |
+            b"f64.load" => value!(Opcode::F64Load(align, offset)) |
+            b"i32.load8_s" => value!(Opcode::I32Load8S(align, offset)) |
+            b"i32.load8_u" => value!(Opcode::I32Load8U(align, offset)) |
+            b"i32.load16_s" => value!(Opcode::I32Load16S(align, offset)) |
+            b"i32.load16_u" => value!(Opcode::I32Load16U(align, offset)) |
+            b"i64.load8_s" => value!(Opcode::I64Load8S(align, offset)) |
+            b"i64.load8_u" => value!(Opcode::I64Load8U(align, offset)) |
+            b"i64.load16_s" => value!(Opcode::I64Load16S(align, offset)) |
+            b"i64.load16_u" => value!(Opcode::I64Load16U(align, offset)) |
+            b"i64.load32_s" => value!(Opcode::I64Load32S(align, offset)) |
+            b"i64.load32_u" => value!(Opcode::I64Load32U(align, offset))
+        ) >>
+        ( opcode )
     ))
 );
 
@@ -241,20 +241,18 @@ named!(
             map!(opt!(complete!(align)), |n| n.unwrap_or_default()),
             |n: u32| n == 0 || n.is_power_of_two()
         ) >>
-        (
-            match op {
-                b"i32.store" => Opcode::I32Store(align, offset),
-                b"i64.store" => Opcode::I64Store(align, offset),
-                b"f32.store" => Opcode::F32Store(align, offset),
-                b"f64.store" => Opcode::F64Store(align, offset),
-                b"i32.store8" => Opcode::I32Store8(align, offset),
-                b"i32.store16" => Opcode::I32Store16(align, offset),
-                b"i64.store8" => Opcode::I64Store8(align, offset),
-                b"i64.store16" => Opcode::I64Store16(align, offset),
-                b"i64.store32" => Opcode::I64Store32(align, offset),
-                _ => unreachable!(),
-            }
-        )
+        opcode: switch!(value!(op),
+            b"i32.store" => value!(Opcode::I32Store(align, offset)) |
+            b"i64.store" => value!(Opcode::I64Store(align, offset)) |
+            b"f32.store" => value!(Opcode::F32Store(align, offset)) |
+            b"f64.store" => value!(Opcode::F64Store(align, offset)) |
+            b"i32.store8" => value!(Opcode::I32Store8(align, offset)) |
+            b"i32.store16" => value!(Opcode::I32Store16(align, offset)) |
+            b"i64.store8" => value!(Opcode::I64Store8(align, offset)) |
+            b"i64.store16" => value!(Opcode::I64Store16(align, offset)) |
+            b"i64.store32" => value!(Opcode::I64Store32(align, offset))
+        ) >>
+        ( opcode )
     ))
 );
 
@@ -651,6 +649,7 @@ mod tests {
                 IResult::Done(&[][..], Opcode::I32Load8U(8, 4)),
             ),
             (b"i32.load8_s align=3", IResult::Error(ErrorKind::Verify)),
+            (b"f32.load8_s", IResult::Error(ErrorKind::Switch)),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -688,6 +687,7 @@ mod tests {
                 IResult::Done(&[][..], Opcode::I64Store32(8, 4)),
             ),
             (b"i32.store32 align=3", IResult::Error(ErrorKind::Verify)),
+            (b"f32.store8_s", IResult::Error(ErrorKind::Switch)),
         ];
 
         for &(code, ref result) in tests.iter() {

@@ -3,7 +3,7 @@ use std::str::{self, FromStr};
 
 use failure::Error;
 use nom::{self, ErrorKind, IResult};
-use parity_wasm::elements::{NameMap, ValueType};
+use parity_wasm::elements::{GlobalType, NameMap, ValueType};
 
 use errors::WastError;
 
@@ -233,6 +233,23 @@ named!(
     )
 );
 
+named!(
+    pub global_type<GlobalType>,
+    alt!(
+        value_type => { |ty| GlobalType::new(ty, false) } |
+        mut_value_type => { |ty| GlobalType::new(ty, true) }
+    )
+);
+
+named!(
+    mut_value_type<ValueType>,
+    ws!(delimited!(
+        tag!("("),
+        preceded!(tag!("mut"), value_type),
+        tag!(")")
+    ))
+);
+
 #[cfg(test)]
 mod tests {
     use pretty_env_logger;
@@ -410,6 +427,22 @@ mod tests {
             assert_eq!(var(code), *result, "parse align: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
+        }
+    }
+
+    #[test]
+    fn parse_global_type() {
+        let tests: Vec<(&[u8], _, _)> = vec![
+            (b"i32", ValueType::I32, false),
+            (b"(mut i64)", ValueType::I64, true),
+        ];
+
+        for (code, value_type, is_mutable) in tests {
+            let (remaining, global_type) = global_type(code).unwrap();
+
+            assert!(remaining.is_empty());
+            assert_eq!(global_type.content_type(), value_type);
+            assert_eq!(global_type.is_mutable(), is_mutable);
         }
     }
 }

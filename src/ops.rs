@@ -11,6 +11,8 @@ named_args!(
             tag!("unreachable") => { |_| Opcode::Unreachable } |
             tag!("nop") => { |_| Opcode::Nop } |
             tag!("return") => { |_| Opcode::Return } |
+            tag!("drop") => { |_| Opcode::Drop } |
+            tag!("select") => { |_| Opcode::Select } |
             apply!(br, labels) |
             apply!(br_if, labels) |
             apply!(br_table, labels) |
@@ -156,6 +158,8 @@ mod tests {
             (b"unreachable", IResult::Done(&[][..], Opcode::Unreachable)),
             (b"nop", IResult::Done(&[][..], Opcode::Nop)),
             (b"return", IResult::Done(&[][..], Opcode::Return)),
+            (b"drop", IResult::Done(&[][..], Opcode::Drop)),
+            (b"select", IResult::Done(&[][..], Opcode::Select)),
         ];
         let labels = NameMap::default();
         let funcs = NameMap::default();

@@ -213,7 +213,10 @@ named!(
     ws!(do_parse!(
         op: recognize!(tuple!(value_type, tag!(".load"), opt!(complete!(tuple!(mem_size, tag!("_"), sign))))) >>
         offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
-        align: map!(opt!(complete!(align)), |n| n.unwrap_or_default()) >>
+        align: verify!(
+            map!(opt!(complete!(align)), |n| n.unwrap_or_default()),
+            |n: u32| n == 0 || n.is_power_of_two()
+        ) >>
         (match op {
             b"i32.load" => Opcode::I32Load(align, offset),
             b"i64.load" => Opcode::I64Load(align, offset),
@@ -245,7 +248,10 @@ named!(
                 opt!(complete!(mem_size))
             )) >>
         offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
-        align: map!(opt!(complete!(align)), |n| n.unwrap_or_default()) >>
+        align: verify!(
+            map!(opt!(complete!(align)), |n| n.unwrap_or_default()),
+            |n: u32| n == 0 || n.is_power_of_two()
+        ) >>
         (
             match op {
                 b"i32.store" => Opcode::I32Store(align, offset),
@@ -283,10 +289,7 @@ named!(
 /// align: align=(1|2|4|8|...)
 named!(
     align<u32>,
-    verify!(
-        map!(preceded!(tag!("align="), nat32), |n| n as u32),
-        |n: u32| n.is_power_of_two()
-    )
+    map!(preceded!(tag!("align="), nat32), |n| n as u32)
 );
 
 #[cfg(test)]
@@ -676,6 +679,7 @@ mod tests {
                 b"i32.load8_u offset=4 align=8",
                 IResult::Done(&[][..], Opcode::I32Load8U(8, 4)),
             ),
+            (b"i32.load8_s align=3", IResult::Error(ErrorKind::Verify)),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -701,17 +705,18 @@ mod tests {
                 IResult::Done(&[][..], Opcode::I32Store16(0, 0)),
             ),
             (
-                b"i64.store8",
-                IResult::Done(&[][..], Opcode::I64Store8(0, 0)),
+                b"i64.store8 offset=4",
+                IResult::Done(&[][..], Opcode::I64Store8(0, 4)),
             ),
             (
-                b"i64.store16",
-                IResult::Done(&[][..], Opcode::I64Store16(0, 0)),
+                b"i64.store16 align=8",
+                IResult::Done(&[][..], Opcode::I64Store16(8, 0)),
             ),
             (
-                b"i64.store32",
-                IResult::Done(&[][..], Opcode::I64Store32(0, 0)),
+                b"i64.store32 offset=4 align=8",
+                IResult::Done(&[][..], Opcode::I64Store32(8, 4)),
             ),
+            (b"i32.store32 align=3", IResult::Error(ErrorKind::Verify)),
         ];
 
         for &(code, ref result) in tests.iter() {

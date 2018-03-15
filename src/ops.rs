@@ -14,11 +14,7 @@ named_args!(
     alt!(
         tag!("unreachable") => { |_| Opcode::Unreachable } |
         tag!("nop") => { |_| Opcode::Nop } |
-        tag!("return") => { |_| Opcode::Return } |
-        tag!("drop") => { |_| Opcode::Drop } |
-        tag!("select") => { |_| Opcode::Select } |
-        tag!("current_memory") => { |_| Opcode::CurrentMemory(0) } |
-        tag!("grow_memory") => { |_| Opcode::GrowMemory(0) } |
+
         block |
         loop_ |
         if_ |
@@ -27,15 +23,26 @@ named_args!(
         apply!(br, labels) |
         apply!(br_if, labels) |
         apply!(br_table, labels) |
+        tag!("return") => { |_| Opcode::Return } |
+
         apply!(call, types) |
         apply!(call_indirect, types, funcs) |
+
+        tag!("drop") => { |_| Opcode::Drop } |
+        tag!("select") => { |_| Opcode::Select } |
+
         apply!(get_local, types) |
         apply!(set_local, types) |
         apply!(tee_local, types) |
         apply!(get_global, types) |
         apply!(set_global, types) |
+
         load |
         store |
+
+        tag!("current_memory") => { |_| Opcode::CurrentMemory(0) } |
+        tag!("grow_memory") => { |_| Opcode::GrowMemory(0) } |
+
         constant |
         unary |
         binary |

@@ -6,7 +6,7 @@ use parity_wasm::elements::{FunctionType, Opcode, Type, ValueType};
 use parse::{const_type, value_type, value_type_list, var, Var, float32, float64, int32, int64};
 
 named_args!(
-    opcode<'a>(labels: &'a NameMap, funcs: &'a NameMap)<Opcode>,
+    opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
     alt_complete!(
             tag!("unreachable") => { |_| Opcode::Unreachable } |
             tag!("nop") => { |_| Opcode::Nop } |
@@ -16,7 +16,13 @@ named_args!(
             apply!(br, labels) |
             apply!(br_if, labels) |
             apply!(br_table, labels) |
-            apply!(call, funcs) |
+            apply!(call, types) |
+            apply!(call_indirect, types, funcs) |
+            apply!(get_local, types) |
+            apply!(set_local, types) |
+            apply!(tee_local, types) |
+            apply!(get_global, types) |
+            apply!(set_global, types) |
             const_value
         )
 );
@@ -144,6 +150,56 @@ named!(
         ))
 );
 
+named_args!(
+    get_local<'a>(types: &'a NameMap)<Opcode>,
+    map!(
+        map_res!(
+            ws!(preceded!(tag!("get_local"), var)),
+            |var: Var| var.resolve_ref(types)
+        ),
+    Opcode::GetLocal)
+);
+
+named_args!(
+    set_local<'a>(types: &'a NameMap)<Opcode>,
+    map!(
+        map_res!(
+            ws!(preceded!(tag!("set_local"), var)),
+            |var: Var| var.resolve_ref(types)
+        ),
+    Opcode::SetLocal)
+);
+
+named_args!(
+    tee_local<'a>(types: &'a NameMap)<Opcode>,
+    map!(
+        map_res!(
+            ws!(preceded!(tag!("tee_local"), var)),
+            |var: Var| var.resolve_ref(types)
+        ),
+    Opcode::TeeLocal)
+);
+
+named_args!(
+    get_global<'a>(types: &'a NameMap)<Opcode>,
+    map!(
+        map_res!(
+            ws!(preceded!(tag!("get_global"), var)),
+            |var: Var| var.resolve_ref(types)
+        ),
+    Opcode::GetGlobal)
+);
+
+named_args!(
+    set_global<'a>(types: &'a NameMap)<Opcode>,
+    map!(
+        map_res!(
+            ws!(preceded!(tag!("set_global"), var)),
+            |var: Var| var.resolve_ref(types)
+        ),
+    Opcode::SetGlobal)
+);
+
 #[cfg(test)]
 mod tests {
     use std::str;
@@ -162,11 +218,12 @@ mod tests {
             (b"select", IResult::Done(&[][..], Opcode::Select)),
         ];
         let labels = NameMap::default();
-        let funcs = NameMap::default();
+        let types = NameMap::default();
+        let mut funcs = vec![];
 
         for &(code, ref result) in tests.iter() {
             assert_eq!(
-                opcode(code, &labels, &funcs),
+                opcode(code, &labels, &types, &mut funcs),
                 *result,
                 "parse opcode: {}",
                 unsafe { str::from_utf8_unchecked(code) }
@@ -392,4 +449,56 @@ mod tests {
             });
         }
     }
+
+    #[test]
+    fn parse_get_local() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"get_local 0", IResult::Done(&[][..], Opcode::GetLocal(0))),
+            (
+                b"get_local $x",
+                IResult::Done(&[][..], Opcode::GetLocal(123)),
+            ),
+            (b"set_local 0", IResult::Done(&[][..], Opcode::SetLocal(0))),
+            (
+                b"set_local $x",
+                IResult::Done(&[][..], Opcode::SetLocal(123)),
+            ),
+            (b"tee_local 0", IResult::Done(&[][..], Opcode::TeeLocal(0))),
+            (
+                b"tee_local $x",
+                IResult::Done(&[][..], Opcode::TeeLocal(123)),
+            ),
+            (
+                b"get_global 0",
+                IResult::Done(&[][..], Opcode::GetGlobal(0)),
+            ),
+            (
+                b"get_global $x",
+                IResult::Done(&[][..], Opcode::GetGlobal(123)),
+            ),
+            (
+                b"set_global 0",
+                IResult::Done(&[][..], Opcode::SetGlobal(0)),
+            ),
+            (
+                b"set_global $x",
+                IResult::Done(&[][..], Opcode::SetGlobal(123)),
+            ),
+        ];
+        let labels = NameMap::default();
+        let mut types = NameMap::default();
+        let mut funcs = vec![];
+
+        types.insert(123, "x".to_owned());
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(
+                opcode(code, &labels, &types, &mut funcs),
+                *result,
+                "parse opcode: {}",
+                unsafe { str::from_utf8_unchecked(code) }
+            );
+        }
+    }
+
 }

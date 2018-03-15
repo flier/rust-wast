@@ -206,7 +206,7 @@ impl Var {
 /// var:    <nat> | <name>
 named!(
     pub var<Var>,
-        alt!(
+        alt_complete!(
         name => { |v: &str| Var::Name(v.to_owned()) } |
         nat => { |v| Var::Index(v as u32) }
     )

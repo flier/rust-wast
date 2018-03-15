@@ -4,9 +4,10 @@ use std::usize;
 use parity_wasm::elements::NameMap;
 
 use failure::Error;
-use parity_wasm::elements::{FunctionType, Opcode, Type, ValueType};
+use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type, ValueType};
 
-use parse::{int_type, value_type, value_type_list, var, Var, float32, float64, int32, int64, nat32};
+use parse::{int_type, name, value_type, value_type_list, var, Var, float32, float64, int32, int64,
+            nat32};
 
 named_args!(
     opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
@@ -18,6 +19,11 @@ named_args!(
         tag!("select") => { |_| Opcode::Select } |
         tag!("current_memory") => { |_| Opcode::CurrentMemory(0) } |
         tag!("grow_memory") => { |_| Opcode::GrowMemory(0) } |
+        block |
+        loop_ |
+        if_ |
+        else_ |
+        end |
         apply!(br, labels) |
         apply!(br_if, labels) |
         apply!(br_table, labels) |
@@ -36,6 +42,68 @@ named_args!(
         compare |
         convert
     )
+);
+
+named!(
+    block<Opcode>,
+    map!(
+        ws!(tuple!(
+            tag!("block"),
+            opt!(complete!(name)),
+            opt!(complete!(block_type))
+        )),
+        |(_, name, block_type)| Opcode::Block(block_type.unwrap_or_else(|| BlockType::NoResult))
+    )
+);
+
+named!(
+    loop_<Opcode>,
+    map!(
+        ws!(tuple!(
+            tag!("loop"),
+            opt!(complete!(name)),
+            opt!(complete!(block_type))
+        )),
+        |(_, name, block_type)| Opcode::Loop(block_type.unwrap_or_else(|| BlockType::NoResult))
+    )
+);
+
+named!(
+    if_<Opcode>,
+    map!(
+        ws!(tuple!(
+            tag!("if"),
+            opt!(complete!(name)),
+            opt!(complete!(block_type))
+        )),
+        |(_, name, block_type)| Opcode::If(block_type.unwrap_or_else(|| BlockType::NoResult))
+    )
+);
+
+named!(
+    else_<Opcode>,
+    map!(
+        ws!(preceded!(tag!("else"), opt!(complete!(name)))),
+        |name| Opcode::Else
+    )
+);
+
+named!(
+    end<Opcode>,
+    map!(ws!(preceded!(tag!("end"), opt!(complete!(name)))), |name| {
+        Opcode::End
+    })
+);
+
+named!(
+    block_type<BlockType>,
+    map!(alt!(result | opt!(value_type)), |block_type| {
+        if let Some(value_type) = block_type {
+            BlockType::Value(value_type)
+        } else {
+            BlockType::NoResult
+        }
+    })
 );
 
 named_args!(
@@ -125,7 +193,7 @@ named_args!(
 named!(
     func_sig<FunctionType>,
     map!(
-        ws!(pair!(many0!(func_param), opt!(complete!(func_result)))),
+        ws!(pair!(many0!(param), opt!(complete!(result)))),
         |(params, return_type)| FunctionType::new(
             params.into_iter().flat_map(|types| types).collect(),
             return_type.unwrap_or_default()
@@ -134,7 +202,7 @@ named!(
 );
 
 named!(
-    func_param<Vec<ValueType>>,
+    param<Vec<ValueType>>,
     ws!(delimited!(
         tag!("("),
         preceded!(tag!("param"), value_type_list),
@@ -143,7 +211,7 @@ named!(
 );
 
 named!(
-    func_result<Option<ValueType>>,
+    result<Option<ValueType>>,
     ws!(delimited!(
         tag!("("),
         preceded!(tag!("result"), opt!(value_type)),
@@ -502,6 +570,130 @@ mod tests {
     }
 
     #[test]
+    fn parse_block() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"block",
+                IResult::Done(&[][..], Opcode::Block(BlockType::NoResult)),
+            ),
+            (
+                b"block $exit",
+                IResult::Done(&[][..], Opcode::Block(BlockType::NoResult)),
+            ),
+            (
+                b"block (result i32)",
+                IResult::Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
+            ),
+            (
+                b"block $done (result i32)",
+                IResult::Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
+            ),
+            (
+                b"block i32",
+                IResult::Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
+            ),
+        ];
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(block(code), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_loop() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"loop",
+                IResult::Done(&[][..], Opcode::Loop(BlockType::NoResult)),
+            ),
+            (
+                b"loop $exit",
+                IResult::Done(&[][..], Opcode::Loop(BlockType::NoResult)),
+            ),
+            (
+                b"loop (result i32)",
+                IResult::Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
+            ),
+            (
+                b"loop $done (result i32)",
+                IResult::Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
+            ),
+            (
+                b"loop i32",
+                IResult::Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
+            ),
+        ];
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(loop_(code), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_if() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"if",
+                IResult::Done(&[][..], Opcode::If(BlockType::NoResult)),
+            ),
+            (
+                b"if $exit",
+                IResult::Done(&[][..], Opcode::If(BlockType::NoResult)),
+            ),
+            (
+                b"if (result i32)",
+                IResult::Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
+            ),
+            (
+                b"if $done (result i32)",
+                IResult::Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
+            ),
+            (
+                b"if i32",
+                IResult::Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
+            ),
+        ];
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(if_(code), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_else() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"else", IResult::Done(&[][..], Opcode::Else)),
+            (b"else $exit", IResult::Done(&[][..], Opcode::Else)),
+        ];
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(else_(code), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_end() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"end", IResult::Done(&[][..], Opcode::End)),
+            (b"end $exit", IResult::Done(&[][..], Opcode::End)),
+        ];
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(end(code), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
     fn parse_br() {
         let tests: Vec<(&[u8], _)> = vec![
             (b"br 0", IResult::Done(&[][..], Opcode::Br(0))),
@@ -601,8 +793,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_func_param() {
-        let func_param_tests: Vec<(&[u8], _)> = vec![
+    fn parse_param() {
+        let param_tests: Vec<(&[u8], _)> = vec![
             (b"(param)", IResult::Done(&[][..], vec![])),
             (b"(param i32)", IResult::Done(&[][..], vec![ValueType::I32])),
             (
@@ -614,16 +806,16 @@ mod tests {
             ),
         ];
 
-        for &(code, ref result) in func_param_tests.iter() {
-            assert_eq!(func_param(code), *result, "parse func_param: {}", unsafe {
+        for &(code, ref result) in param_tests.iter() {
+            assert_eq!(param(code), *result, "parse func_param: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }
     }
 
     #[test]
-    fn parse_func_result() {
-        let func_result_tests: Vec<(&[u8], _)> = vec![
+    fn parse_result() {
+        let result_tests: Vec<(&[u8], _)> = vec![
             (b"(result)", IResult::Done(&[][..], None)),
             (
                 b"(result i32)",
@@ -632,13 +824,10 @@ mod tests {
             (b"(result i32 i64)", IResult::Error(ErrorKind::Tag)),
         ];
 
-        for &(code, ref result) in func_result_tests.iter() {
-            assert_eq!(
-                func_result(code),
-                *result,
-                "parse func_result: {}",
-                unsafe { str::from_utf8_unchecked(code) }
-            );
+        for &(code, ref res) in result_tests.iter() {
+            assert_eq!(result(code), *res, "parse func_result: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
         }
     }
 

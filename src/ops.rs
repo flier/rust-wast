@@ -1,30 +1,36 @@
+use std::str::{self, FromStr};
+use std::usize;
+
 use parity_wasm::elements::NameMap;
 
 use failure::Error;
 use parity_wasm::elements::{FunctionType, Opcode, Type, ValueType};
 
-use parse::{const_type, value_type, value_type_list, var, Var, float32, float64, int32, int64};
+use parse::{const_type, value_type, value_type_list, var, Var, float32, float64, int32, int64,
+            nat32};
 
 named_args!(
     opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
-    alt_complete!(
-            tag!("unreachable") => { |_| Opcode::Unreachable } |
-            tag!("nop") => { |_| Opcode::Nop } |
-            tag!("return") => { |_| Opcode::Return } |
-            tag!("drop") => { |_| Opcode::Drop } |
-            tag!("select") => { |_| Opcode::Select } |
-            apply!(br, labels) |
-            apply!(br_if, labels) |
-            apply!(br_table, labels) |
-            apply!(call, types) |
-            apply!(call_indirect, types, funcs) |
-            apply!(get_local, types) |
-            apply!(set_local, types) |
-            apply!(tee_local, types) |
-            apply!(get_global, types) |
-            apply!(set_global, types) |
-            const_value
-        )
+    alt!(
+        tag!("unreachable") => { |_| Opcode::Unreachable } |
+        tag!("nop") => { |_| Opcode::Nop } |
+        tag!("return") => { |_| Opcode::Return } |
+        tag!("drop") => { |_| Opcode::Drop } |
+        tag!("select") => { |_| Opcode::Select } |
+        apply!(br, labels) |
+        apply!(br_if, labels) |
+        apply!(br_table, labels) |
+        apply!(call, types) |
+        apply!(call_indirect, types, funcs) |
+        apply!(get_local, types) |
+        apply!(set_local, types) |
+        apply!(tee_local, types) |
+        apply!(get_global, types) |
+        apply!(set_global, types) |
+        load |
+        store |
+        const_value
+    )
 );
 
 named_args!(
@@ -200,9 +206,94 @@ named_args!(
     Opcode::SetGlobal)
 );
 
+/// <val_type>.load((8|16|32)_<sign>)? <offset>? <align>?
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    load<Opcode>,
+    ws!(do_parse!(
+        op: recognize!(tuple!(value_type, tag!(".load"), opt!(complete!(tuple!(mem_size, tag!("_"), sign))))) >>
+        offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
+        align: map!(opt!(complete!(align)), |n| n.unwrap_or_default()) >>
+        (match op {
+            b"i32.load" => Opcode::I32Load(align, offset),
+            b"i64.load" => Opcode::I64Load(align, offset),
+            b"f32.load" => Opcode::F32Load(align, offset),
+            b"f64.load" => Opcode::F64Load(align, offset),
+            b"i32.load8_s" => Opcode::I32Load8S(align, offset),
+            b"i32.load8_u" => Opcode::I32Load8U(align, offset),
+            b"i32.load16_s" => Opcode::I32Load16S(align, offset),
+            b"i32.load16_u" => Opcode::I32Load16U(align, offset),
+            b"i64.load8_s" => Opcode::I64Load8S(align, offset),
+            b"i64.load8_u" => Opcode::I64Load8U(align, offset),
+            b"i64.load16_s" => Opcode::I64Load16S(align, offset),
+            b"i64.load16_u" => Opcode::I64Load16U(align, offset),
+            b"i64.load32_s" => Opcode::I64Load32S(align, offset),
+            b"i64.load32_u" => Opcode::I64Load32U(align, offset),
+            _ => unreachable!(),
+        })
+    ))
+);
+
+/// <val_type>.store(8|16|32)? <offset>? <align>?
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    store<Opcode>,
+    ws!(do_parse!(
+        op: recognize!(tuple!(
+                value_type,
+                tag!(".store"),
+                opt!(complete!(mem_size))
+            )) >>
+        offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
+        align: map!(opt!(complete!(align)), |n| n.unwrap_or_default()) >>
+        (
+            match op {
+                b"i32.store" => Opcode::I32Store(align, offset),
+                b"i64.store" => Opcode::I64Store(align, offset),
+                b"f32.store" => Opcode::F32Store(align, offset),
+                b"f64.store" => Opcode::F64Store(align, offset),
+                b"i32.store8" => Opcode::I32Store8(align, offset),
+                b"i32.store16" => Opcode::I32Store16(align, offset),
+                b"i64.store8" => Opcode::I64Store8(align, offset),
+                b"i64.store16" => Opcode::I64Store16(align, offset),
+                b"i64.store32" => Opcode::I64Store32(align, offset),
+                _ => unreachable!(),
+            }
+        )
+    ))
+);
+
+named!(
+    mem_size<usize>,
+    map_res!(
+        map_res!(alt!(tag!("8") | tag!("16") | tag!("32")), str::from_utf8),
+        usize::from_str
+    )
+);
+
+/// sign:  s|u
+named!(sign, alt!(tag!("s") | tag!("u")));
+
+/// offset: offset=<nat>
+named!(
+    offset<u32>,
+    map!(preceded!(tag!("offset="), nat32), |n| n as u32)
+);
+
+/// align: align=(1|2|4|8|...)
+named!(
+    align<u32>,
+    verify!(
+        map!(preceded!(tag!("align="), nat32), |n| n as u32),
+        |n: u32| n.is_power_of_two()
+    )
+);
+
 #[cfg(test)]
 mod tests {
     use std::str;
+
+    use pretty_env_logger;
 
     use nom::{ErrorKind, IResult};
 
@@ -501,4 +592,132 @@ mod tests {
         }
     }
 
+    #[test]
+    fn parse_offset() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"offset=1234", IResult::Done(&b""[..], 1234)),
+            (b"offset=0xABCD", IResult::Done(&b""[..], 0xABCD)),
+        ];
+
+        for (code, ref result) in tests {
+            assert_eq!(offset(code), *result, "parse offset: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_align() {
+        let tests: Vec<(&[u8], _)> = vec![(b"align=8", IResult::Done(&b""[..], 8))];
+
+        for (code, ref result) in tests {
+            assert_eq!(align(code), *result, "parse align: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_load() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"i32.load", IResult::Done(&[][..], Opcode::I32Load(0, 0))),
+            (b"i64.load", IResult::Done(&[][..], Opcode::I64Load(0, 0))),
+            (b"f32.load", IResult::Done(&[][..], Opcode::F32Load(0, 0))),
+            (b"f64.load", IResult::Done(&[][..], Opcode::F64Load(0, 0))),
+            (
+                b"i32.load8_s",
+                IResult::Done(&[][..], Opcode::I32Load8S(0, 0)),
+            ),
+            (
+                b"i32.load8_u",
+                IResult::Done(&[][..], Opcode::I32Load8U(0, 0)),
+            ),
+            (
+                b"i32.load16_s",
+                IResult::Done(&[][..], Opcode::I32Load16S(0, 0)),
+            ),
+            (
+                b"i32.load16_u",
+                IResult::Done(&[][..], Opcode::I32Load16U(0, 0)),
+            ),
+            (
+                b"i64.load8_s",
+                IResult::Done(&[][..], Opcode::I64Load8S(0, 0)),
+            ),
+            (
+                b"i64.load8_u",
+                IResult::Done(&[][..], Opcode::I64Load8U(0, 0)),
+            ),
+            (
+                b"i64.load16_s",
+                IResult::Done(&[][..], Opcode::I64Load16S(0, 0)),
+            ),
+            (
+                b"i64.load16_u",
+                IResult::Done(&[][..], Opcode::I64Load16U(0, 0)),
+            ),
+            (
+                b"i64.load32_s",
+                IResult::Done(&[][..], Opcode::I64Load32S(0, 0)),
+            ),
+            (
+                b"i64.load32_u",
+                IResult::Done(&[][..], Opcode::I64Load32U(0, 0)),
+            ),
+            (
+                b"i64.load offset=4",
+                IResult::Done(&[][..], Opcode::I64Load(0, 4)),
+            ),
+            (
+                b"i32.load8_s align=8",
+                IResult::Done(&[][..], Opcode::I32Load8S(8, 0)),
+            ),
+            (
+                b"i32.load8_u offset=4 align=8",
+                IResult::Done(&[][..], Opcode::I32Load8U(8, 4)),
+            ),
+        ];
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(load(code), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_store() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"i32.store", IResult::Done(&[][..], Opcode::I32Store(0, 0))),
+            (b"i64.store", IResult::Done(&[][..], Opcode::I64Store(0, 0))),
+            (b"f32.store", IResult::Done(&[][..], Opcode::F32Store(0, 0))),
+            (b"f64.store", IResult::Done(&[][..], Opcode::F64Store(0, 0))),
+            (
+                b"i32.store8",
+                IResult::Done(&[][..], Opcode::I32Store8(0, 0)),
+            ),
+            (
+                b"i32.store16",
+                IResult::Done(&[][..], Opcode::I32Store16(0, 0)),
+            ),
+            (
+                b"i64.store8",
+                IResult::Done(&[][..], Opcode::I64Store8(0, 0)),
+            ),
+            (
+                b"i64.store16",
+                IResult::Done(&[][..], Opcode::I64Store16(0, 0)),
+            ),
+            (
+                b"i64.store32",
+                IResult::Done(&[][..], Opcode::I64Store32(0, 0)),
+            ),
+        ];
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(store(code), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
 }

@@ -212,42 +212,10 @@ named!(
     )
 );
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Offset(i32);
-
-/// offset: offset=<nat>
-named!(
-    offset<Offset>,
-    map!(preceded!(tag!("offset="), nat32), |n| Offset(n))
-);
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Align(isize);
-
-/// align: align=(1|2|4|8|...)
-named!(
-    align<Align>,
-    map!(
-        preceded!(
-            tag!("align="),
-            verify!(nat, |n: isize| (n as usize).is_power_of_two())
-        ),
-        Align
-    )
-);
+named!(pub value_type_list<Vec<ValueType>>, ws!(many0!(value_type)));
 
 /// value_type: i32 | i64 | f32 | f64
-named!(
-    pub value_type<ValueType>,
-    alt!(
-        tag!("i32") => { |_| ValueType::I32 } |
-        tag!("i64") => { |_| ValueType::I64 } |
-        tag!("f32") => { |_| ValueType::F32 } |
-        tag!("f64") => { |_| ValueType::F64 }
-    )
-);
-
-named!(pub value_type_list<Vec<ValueType>>, ws!(many0!(value_type)));
+named!(pub value_type<ValueType>, alt!(int_type | float_type ));
 
 named!(
     pub int_type<ValueType>,
@@ -262,14 +230,6 @@ named!(
     alt!(
         tag!("f32") => { |_| ValueType::F32 } |
         tag!("f64") => { |_| ValueType::F64 }
-    )
-);
-
-named!(
-    mem_size<usize>,
-    map_res!(
-        map_res!(alt!(tag!("8") | tag!("16") | tag!("32")), str::from_utf8),
-        usize::from_str
     )
 );
 
@@ -439,20 +399,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_offset() {
-        let tests: Vec<(&[u8], _)> = vec![
-            (b"offset=1234", IResult::Done(&b""[..], Offset(1234))),
-            (b"offset=0xABCD", IResult::Done(&b""[..], Offset(0xABCD))),
-        ];
-
-        for (code, ref result) in tests {
-            assert_eq!(offset(code), *result, "parse offset: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
-        }
-    }
-
-    #[test]
     fn parse_var() {
         let tests: Vec<(&[u8], _)> = vec![
             (b"0", IResult::Done(&b""[..], Var::Index(0))),
@@ -464,17 +410,6 @@ mod tests {
 
         for (code, ref result) in tests {
             assert_eq!(var(code), *result, "parse align: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
-        }
-    }
-
-    #[test]
-    fn parse_align() {
-        let tests: Vec<(&[u8], _)> = vec![(b"align=8", IResult::Done(&b""[..], Align(8)))];
-
-        for (code, ref result) in tests {
-            assert_eq!(align(code), *result, "parse align: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

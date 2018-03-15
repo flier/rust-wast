@@ -16,6 +16,8 @@ named_args!(
         tag!("return") => { |_| Opcode::Return } |
         tag!("drop") => { |_| Opcode::Drop } |
         tag!("select") => { |_| Opcode::Select } |
+        tag!("current_memory") => { |_| Opcode::CurrentMemory(0) } |
+        tag!("grow_memory") => { |_| Opcode::GrowMemory(0) } |
         apply!(br, labels) |
         apply!(br_if, labels) |
         apply!(br_table, labels) |
@@ -308,6 +310,14 @@ mod tests {
             (b"return", IResult::Done(&[][..], Opcode::Return)),
             (b"drop", IResult::Done(&[][..], Opcode::Drop)),
             (b"select", IResult::Done(&[][..], Opcode::Select)),
+            (
+                b"current_memory",
+                IResult::Done(&[][..], Opcode::CurrentMemory(0)),
+            ),
+            (
+                b"grow_memory",
+                IResult::Done(&[][..], Opcode::GrowMemory(0)),
+            ),
         ];
         let labels = NameMap::default();
         let types = NameMap::default();

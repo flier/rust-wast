@@ -18,6 +18,7 @@ mod errors;
 #[macro_use]
 mod parse;
 mod ops;
+mod func;
 mod module;
 
 pub use errors::WastError;

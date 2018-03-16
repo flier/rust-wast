@@ -4,10 +4,10 @@ use std::usize;
 use parity_wasm::elements::NameMap;
 
 use failure::Error;
-use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type, ValueType};
+use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type};
 
-use parse::{int_type, name, value_type, value_type_list, var, Var, float32, float64, int32, int64,
-            nat32};
+use parse::{int_type, name, value_type, var, Var, float32, float64, int32, int64, nat32};
+use func::{func_type, result};
 
 named_args!(
     opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
@@ -156,7 +156,7 @@ named_args!(
 );
 
 named_args!(
-    type_use<'a>(types: &'a NameMap)<u32>,
+    pub type_use<'a>(types: &'a NameMap)<u32>,
     ws!(delimited!(
         tag!("("),
         preceded!(
@@ -187,43 +187,6 @@ named_args!(
                 Opcode::CallIndirect(0, 0)
             }
         )
-    ))
-);
-
-named_args!(
-    func_type<'a>(types: &'a NameMap)<(Option<u32>, Option<FunctionType>)>,
-    alt!(
-        map_res!(var, |var: Var| var.resolve_ref(types)) => { |idx| (Some(idx), None) } |
-        ws!(pair!(opt!(apply!(type_use, types)), opt!(complete!(func_sig))))
-    )
-);
-
-named!(
-    func_sig<FunctionType>,
-    map!(
-        ws!(pair!(many0!(param), opt!(complete!(result)))),
-        |(params, return_type)| FunctionType::new(
-            params.into_iter().flat_map(|types| types).collect(),
-            return_type.unwrap_or_default()
-        )
-    )
-);
-
-named!(
-    param<Vec<ValueType>>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(tag!("param"), value_type_list),
-        tag!(")")
-    ))
-);
-
-named!(
-    result<Option<ValueType>>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(tag!("result"), opt!(value_type)),
-        tag!(")")
     ))
 );
 
@@ -554,7 +517,7 @@ mod tests {
     use std::str;
 
     use pretty_env_logger;
-
+    use parity_wasm::elements::ValueType;
     use nom::{ErrorKind, IResult};
 
     use super::*;
@@ -810,45 +773,6 @@ mod tests {
                 "parse opcode: {}",
                 unsafe { str::from_utf8_unchecked(code) }
             );
-        }
-    }
-
-    #[test]
-    fn parse_param() {
-        let param_tests: Vec<(&[u8], _)> = vec![
-            (b"(param)", IResult::Done(&[][..], vec![])),
-            (b"(param i32)", IResult::Done(&[][..], vec![ValueType::I32])),
-            (
-                b"(param f64 i32 i64)",
-                IResult::Done(
-                    &[][..],
-                    vec![ValueType::F64, ValueType::I32, ValueType::I64],
-                ),
-            ),
-        ];
-
-        for &(code, ref result) in param_tests.iter() {
-            assert_eq!(param(code), *result, "parse func_param: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
-        }
-    }
-
-    #[test]
-    fn parse_result() {
-        let result_tests: Vec<(&[u8], _)> = vec![
-            (b"(result)", IResult::Done(&[][..], None)),
-            (
-                b"(result i32)",
-                IResult::Done(&[][..], Some(ValueType::I32)),
-            ),
-            (b"(result i32 i64)", IResult::Error(ErrorKind::Tag)),
-        ];
-
-        for &(code, ref res) in result_tests.iter() {
-            assert_eq!(result(code), *res, "parse func_result: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
         }
     }
 

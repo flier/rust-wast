@@ -6,10 +6,11 @@ authors = ["Flier Lu <flier.lu@gmail.com>"]
 [dependencies]
 log = "0.4"
 failure = "0.1"
-nom = "3.2"
+lazy_static = "1.0"
+regex = "0.2"
+nom = { version = "3.2", features = ["regexp_macros"] }
 parity-wasm = "0.27"
 
 [dev-dependencies]
 pretty_env_logger = "0.2"
 getopts = "0.2"
-lazy_static = "1.0"

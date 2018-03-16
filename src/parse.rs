@@ -283,6 +283,15 @@ named_args!(
     )
 );
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    comment,
+    alt!(
+        preceded!(tag!("(;"), take_until_and_consume!(";)")) |
+        preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
+    )
+);
+
 #[cfg(test)]
 mod tests {
     use pretty_env_logger;
@@ -507,6 +516,30 @@ mod tests {
 
             assert!(remaining.is_empty());
             assert_eq!(export.field(), field);
+        }
+    }
+
+    #[test]
+    fn parse_comment() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b";; foobar", IResult::Done(&[][..], &b" foobar"[..])),
+            (b";; foo\nbar", IResult::Done(&b"bar"[..], &b" foo\n"[..])),
+            (
+                b";; foo\r\nbar",
+                IResult::Done(&b"bar"[..], &b" foo\r\n"[..]),
+            ),
+            (b";; foo;;bar", IResult::Done(&b""[..], &b" foo;;bar"[..])),
+            (b"(;foobar;)", IResult::Done(&b""[..], &b"foobar"[..])),
+            (
+                b"(;foo(;foobar;)bar;)",
+                IResult::Done(&b"bar;)"[..], &b"foo(;foobar"[..]),
+            ),
+        ];
+
+        for (code, result) in tests {
+            assert_eq!(comment(code), result, "parse comment: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
         }
     }
 }

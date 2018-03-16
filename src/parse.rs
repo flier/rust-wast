@@ -3,7 +3,7 @@ use std::str::{self, FromStr};
 
 use failure::Error;
 use nom::{self, ErrorKind, IResult};
-use parity_wasm::elements::{GlobalType, NameMap, ValueType};
+use parity_wasm::elements::{ExportEntry, GlobalType, Internal, NameMap, ValueType};
 
 use errors::WastError;
 
@@ -250,6 +250,39 @@ named!(
     ))
 );
 
+named!(
+    inline_export<String>,
+    ws!(delimited!(
+        tag!("("),
+        preceded!(tag!("export"), string),
+        tag!(")")
+    ))
+);
+
+named_args!(
+    export_entry<'a>(types: &'a NameMap)<ExportEntry>,
+    ws!(
+        do_parse!(
+            field: ws!(preceded!(tag!("export"), string)) >>
+            res: ws!(delimited!(
+                tag!("("),
+                pair!(
+                    alt!(tag!("func") | tag!("table") | tag!("memory") | tag!("global")),
+                    map_res!(var, |var: Var| var.resolve_ref(types))
+                ),
+                tag!(")")
+            )) >>
+            entry: switch!(value!(res.0),
+                b"func" => value!(ExportEntry::new(field, Internal::Function(res.1))) |
+                b"table" => value!(ExportEntry::new(field, Internal::Table(res.1))) |
+                b"memory" => value!(ExportEntry::new(field, Internal::Memory(res.1))) |
+                b"global" => value!(ExportEntry::new(field, Internal::Global(res.1)))
+            ) >>
+            ( entry )
+        )
+    )
+);
+
 #[cfg(test)]
 mod tests {
     use pretty_env_logger;
@@ -443,6 +476,37 @@ mod tests {
             assert!(remaining.is_empty());
             assert_eq!(global_type.content_type(), value_type);
             assert_eq!(global_type.is_mutable(), is_mutable);
+        }
+    }
+
+    #[test]
+    fn parse_inline_export() {
+        let tests: Vec<(&[u8], _)> =
+            vec![(b"(export \"a\")", IResult::Done(&[][..], "a".to_owned()))];
+
+        for (code, result) in tests {
+            assert_eq!(inline_export(code), result);
+        }
+    }
+
+    #[test]
+    fn parse_export_entry() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"export \"a\" (func 123)", "a"),
+            (b"export \"a\" (global 123)", "a"),
+            (b"export \"a\" (table $a)", "a"),
+            (b"export \"a\" (memory $a)", "a"),
+        ];
+
+        let mut types = NameMap::default();
+
+        types.insert(123, "a".to_owned());
+
+        for (code, field) in tests {
+            let (remaining, export) = export_entry(code, &types).unwrap();
+
+            assert!(remaining.is_empty());
+            assert_eq!(export.field(), field);
         }
     }
 }

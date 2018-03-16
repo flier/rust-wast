@@ -1,24 +1,71 @@
 use parity_wasm::elements::{Func, FunctionType, NameMap, ValueType};
+use parity_wasm::builder::{ExportBuilder, FunctionBuilder, ImportBuilder};
 
-use parse::{value_type, value_type_list, var, Var};
+use parse::{string, value_type, value_type_list, var, Var};
 use ops::type_use;
 
 named_args!(
-    pub func_type<'a>(types: &'a NameMap)<(Option<u32>, Option<FunctionType>)>,
-    alt!(
-        map_res!(var, |var: Var| var.resolve_ref(types)) => { |idx| (Some(idx), None) } |
-        ws!(pair!(opt!(apply!(type_use, types)), opt!(complete!(func_sig))))
+    pub func<'a>(types: &'a NameMap)<(Option<Var>, Option<FunctionBuilder>)>,
+    ws!(delimited!(
+        tag!("("),
+        preceded!(tag!("func"), pair!(opt!(complete!(var)), opt!(complete!(apply!(func_fields, types))))),
+        tag!(")")
+    ))
+);
+
+named_args!(
+    func_fields<'a>(types: &'a NameMap)<FunctionBuilder>,
+    ws!(alt_complete!(
+        pair!(opt!(apply!(type_use, types)), func_fields_body) => { |_| FunctionBuilder::new() } |
+        tuple!(inline_import, opt!(apply!(type_use, types)), func_fields_body) => { |_| FunctionBuilder::new() } |
+        pair!(inline_export, apply!(func_fields, types)) => { |_| FunctionBuilder::new() }
+    ))
+);
+
+named!(
+    func_fields_body<FunctionType>,
+    map!(
+        ws!(pair!(many0!(func_fields_param), opt!(complete!(result)))),
+        |(params, result_type)| FunctionType::new(
+            params.into_iter().flat_map(|param| param).collect(),
+            result_type.unwrap_or_default()
+        )
     )
 );
 
 named!(
-    func_sig<FunctionType>,
+    pub func_fields_param<Vec<ValueType>>,
+    ws!(delimited!(
+        tag!("("),
+        preceded!(tag!("param"), alt!(
+            preceded!(var, value_type) => { |ty| vec![ty] } |
+            value_type_list => { |types| types }
+        )),
+        tag!(")")
+    ))
+);
+
+named!(
+    inline_import<ImportBuilder>,
     map!(
-        ws!(pair!(many0!(param), opt!(complete!(result)))),
-        |(params, return_type)| FunctionType::new(
-            params.into_iter().flat_map(|types| types).collect(),
-            return_type.unwrap_or_default()
-        )
+        ws!(delimited!(
+            tag!("("),
+            preceded!(tag!("import"), pair!(string, string)),
+            tag!(")")
+        )),
+        |(module, field)| ImportBuilder::new().path(&module, &field)
+    )
+);
+
+named!(
+    inline_export<ExportBuilder>,
+    map!(
+        ws!(delimited!(
+            tag!("("),
+            preceded!(tag!("export"), string),
+            tag!(")")
+        )),
+        |field| ExportBuilder::new().field(&field)
     )
 );
 
@@ -50,7 +97,7 @@ mod tests {
 
     #[test]
     fn parse_param() {
-        let param_tests: Vec<(&[u8], _)> = vec![
+        let tests: Vec<(&[u8], _)> = vec![
             (b"(param)", IResult::Done(&[][..], vec![])),
             (b"(param i32)", IResult::Done(&[][..], vec![ValueType::I32])),
             (
@@ -62,7 +109,7 @@ mod tests {
             ),
         ];
 
-        for &(code, ref result) in param_tests.iter() {
+        for &(code, ref result) in tests.iter() {
             assert_eq!(param(code), *result, "parse func_param: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
@@ -71,7 +118,7 @@ mod tests {
 
     #[test]
     fn parse_result() {
-        let result_tests: Vec<(&[u8], _)> = vec![
+        let tests: Vec<(&[u8], _)> = vec![
             (b"(result)", IResult::Done(&[][..], None)),
             (
                 b"(result i32)",
@@ -80,8 +127,45 @@ mod tests {
             (b"(result i32 i64)", IResult::Error(ErrorKind::Tag)),
         ];
 
-        for &(code, ref res) in result_tests.iter() {
+        for &(code, ref res) in tests.iter() {
             assert_eq!(result(code), *res, "parse func_result: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_inline_import() {
+        let tests: Vec<(&[u8], _)> = vec![(b"(import \"m\" \"a\")", ("m", "a"))];
+
+        for (code, result) in tests {
+            let res = inline_import(code);
+
+            assert!(res.is_done(), "parse `{}` failed", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_inline_export() {
+        let tests: Vec<(&[u8], _)> = vec![(b"(export \"a\")", "a")];
+
+        for (code, result) in tests {
+            let res = inline_export(code);
+
+            assert!(res.is_done(), "parse `{}` failed", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_func() {
+        let tests: Vec<(&[u8], _)> = vec![(b"(func)", IResult::Error(ErrorKind::Tag))];
+
+        for &(code, ref res) in tests.iter() {
+            assert_eq!(result(code), *res, "parse func: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

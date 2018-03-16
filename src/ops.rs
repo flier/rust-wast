@@ -7,7 +7,7 @@ use failure::Error;
 use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type};
 
 use parse::{int_type, name, value_type, var, Var, float32, float64, int32, int64, nat32};
-use func::{func_type, result};
+use func::{param, result};
 
 named_args!(
     opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
@@ -168,8 +168,27 @@ named_args!(
 );
 
 named_args!(
+    call_instr_type<'a>(types: &'a NameMap)<(Option<u32>, Option<FunctionType>)>,
+    alt!(
+        map_res!(var, |var: Var| var.resolve_ref(types)) => { |idx| (Some(idx), None) } |
+        ws!(pair!(opt!(apply!(type_use, types)), opt!(complete!(call_instr_params))))
+    )
+);
+
+named!(
+    call_instr_params<FunctionType>,
+    map!(
+        ws!(pair!(many0!(param), opt!(complete!(result)))),
+        |(params, return_type)| FunctionType::new(
+            params.into_iter().flat_map(|types| types).collect(),
+            return_type.unwrap_or_default()
+        )
+    )
+);
+
+named_args!(
     call_indirect<'a>(types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
-    ws!(preceded!(tag!("call_indirect"), map!(apply!(func_type, types),
+    ws!(preceded!(tag!("call_indirect"), map!(apply!(call_instr_type, types),
         |(type_use, func_type): (Option<u32>, Option<FunctionType>)|
             if let Some(idx) = type_use {
                 Opcode::CallIndirect(idx, 0)

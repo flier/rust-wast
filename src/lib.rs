@@ -1,4 +1,5 @@
 #![recursion_limit = "128"]
+#![allow(dead_code, unused_variables)]
 
 #[macro_use]
 extern crate failure;

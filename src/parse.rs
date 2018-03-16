@@ -250,15 +250,6 @@ named!(
     ))
 );
 
-named!(
-    inline_export<String>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(tag!("export"), string),
-        tag!(")")
-    ))
-);
-
 named_args!(
     export_entry<'a>(types: &'a NameMap)<ExportEntry>,
     ws!(
@@ -485,16 +476,6 @@ mod tests {
             assert!(remaining.is_empty());
             assert_eq!(global_type.content_type(), value_type);
             assert_eq!(global_type.is_mutable(), is_mutable);
-        }
-    }
-
-    #[test]
-    fn parse_inline_export() {
-        let tests: Vec<(&[u8], _)> =
-            vec![(b"(export \"a\")", IResult::Done(&[][..], "a".to_owned()))];
-
-        for (code, result) in tests {
-            assert_eq!(inline_export(code), result);
         }
     }
 

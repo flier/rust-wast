@@ -15,6 +15,7 @@ extern crate regex;
 #[cfg(test)]
 extern crate pretty_env_logger;
 
+#[macro_use]
 mod errors;
 #[macro_use]
 mod parse;

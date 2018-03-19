@@ -537,7 +537,7 @@ mod tests {
 
     use pretty_env_logger;
     use parity_wasm::elements::ValueType;
-    use nom::{ErrorKind, IResult};
+    use nom::{self, ErrorKind, IResult};
 
     use super::*;
 
@@ -979,8 +979,14 @@ mod tests {
                 b"i32.load8_u offset=4 align=8",
                 IResult::Done(&[][..], Opcode::I32Load8U(8, 4)),
             ),
-            (b"i32.load8_s align=3", IResult::Error(ErrorKind::Verify)),
-            (b"f32.load8_s", IResult::Error(ErrorKind::Switch)),
+            (
+                b"i32.load8_s align=3",
+                IResult::Error(nom::Err::Position(ErrorKind::Verify, &b"align=3"[..])),
+            ),
+            (
+                b"f32.load8_s",
+                IResult::Error(nom::Err::Position(ErrorKind::Switch, &b""[..])),
+            ),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -1017,8 +1023,14 @@ mod tests {
                 b"i64.store32 offset=4 align=8",
                 IResult::Done(&[][..], Opcode::I64Store32(8, 4)),
             ),
-            (b"i32.store32 align=3", IResult::Error(ErrorKind::Verify)),
-            (b"f32.store8_s", IResult::Error(ErrorKind::Switch)),
+            (
+                b"i32.store32 align=3",
+                IResult::Error(nom::Err::Position(ErrorKind::Verify, &b"align=3"[..])),
+            ),
+            (
+                b"f32.store8_s",
+                IResult::Error(nom::Err::Position(ErrorKind::Switch, &b"_s"[..])),
+            ),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -1031,18 +1043,37 @@ mod tests {
     #[test]
     fn parse_constant() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"i32.const 0xffffffff", IResult::Error(ErrorKind::Switch)),
+            (
+                b"i32.const 0xffffffff",
+                IResult::Error(nom::Err::NodePosition(
+                    ErrorKind::Switch,
+                    &b"i32.const 0xffffffff"[..],
+                    vec![nom::Err::Position(ErrorKind::Verify, &b"0xffffffff"[..])],
+                )),
+            ),
             (
                 b"i32.const -0x80000000",
                 IResult::Done(&[][..], Opcode::I32Const(-0x80000000)),
             ),
             (
                 b"i64.const 18446744073709551615",
-                IResult::Error(ErrorKind::Switch),
+                IResult::Error(nom::Err::NodePosition(
+                    ErrorKind::Switch,
+                    &b"i64.const 18446744073709551615"[..],
+                    vec![
+                        nom::Err::Position(ErrorKind::Alt, &b"18446744073709551615"[..]),
+                    ],
+                )),
             ),
             (
                 b"i64.const -9223372036854775808",
-                IResult::Error(ErrorKind::Switch),
+                IResult::Error(nom::Err::NodePosition(
+                    ErrorKind::Switch,
+                    &b"i64.const -9223372036854775808"[..],
+                    vec![
+                        nom::Err::Position(ErrorKind::Alt, &b"-9223372036854775808"[..]),
+                    ],
+                )),
             ),
             (
                 b"f32.const 0x1p127",

@@ -16,16 +16,16 @@ named_args!(
 named_args!(
     func_fields<'a>(types: &'a NameMap)<FunctionBuilder>,
     ws!(alt_complete!(
-        pair!(opt!(apply!(type_use, types)), func_fields_body) => { |_| FunctionBuilder::new() } |
-        tuple!(inline_import, opt!(apply!(type_use, types)), func_fields_body) => { |_| FunctionBuilder::new() } |
+        pair!(opt!(apply!(type_use, types)), func_type) => { |_| FunctionBuilder::new() } |
+        tuple!(inline_import, opt!(apply!(type_use, types)), func_type) => { |_| FunctionBuilder::new() } |
         pair!(inline_export, apply!(func_fields, types)) => { |_| FunctionBuilder::new() }
     ))
 );
 
 named!(
-    func_fields_body<FunctionType>,
+    pub func_type<FunctionType>,
     map!(
-        ws!(pair!(many0!(func_fields_param), opt!(complete!(result)))),
+        ws!(pair!(many0!(param), opt!(complete!(result)))),
         |(params, result_type)| FunctionType::new(
             params.into_iter().flat_map(|param| param).collect(),
             result_type.unwrap_or_default()
@@ -91,7 +91,7 @@ named!(
 mod tests {
     use std::str;
 
-    use nom::{ErrorKind, IResult};
+    use nom::{self, ErrorKind, IResult};
 
     use super::*;
 
@@ -124,7 +124,10 @@ mod tests {
                 b"(result i32)",
                 IResult::Done(&[][..], Some(ValueType::I32)),
             ),
-            (b"(result i32 i64)", IResult::Error(ErrorKind::Tag)),
+            (
+                b"(result i32 i64)",
+                IResult::Error(nom::Err::Position(ErrorKind::Tag, &b"i64)"[..])),
+            ),
         ];
 
         for &(code, ref res) in tests.iter() {
@@ -162,7 +165,12 @@ mod tests {
 
     #[test]
     fn parse_func() {
-        let tests: Vec<(&[u8], _)> = vec![(b"(func)", IResult::Error(ErrorKind::Tag))];
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"(func)",
+                IResult::Error(nom::Err::Position(ErrorKind::Tag, &b"func)"[..])),
+            ),
+        ];
 
         for &(code, ref res) in tests.iter() {
             assert_eq!(result(code), *res, "parse func: {}", unsafe {

@@ -2,7 +2,8 @@ use std::{i32, i64};
 use std::str::{self, FromStr};
 
 use failure::Error;
-use nom::{self, ErrorKind, IResult};
+use nom::{self, IResult};
+use nom::ErrorKind::*;
 use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, GlobalType, ImportEntry,
                             Internal, MemoryType, NameMap, TableType, Type, TypeSection, ValueType};
 
@@ -12,88 +13,114 @@ use func::func_type;
 /// num:    <digit> (_? <digit>)*
 named!(
     pub num<String>,
-    map!(map_res!(recognize!(separated_nonempty_list_complete!(
-        tag!("_"),
-        nom::digit
-    )), str::from_utf8), |s: &str| s.replace("_", ""))
+    parsing!(Num,
+        map!(
+            map_res!(
+                recognize!(
+                    separated_nonempty_list_complete!(tag!("_"), nom::digit)
+                ),
+                str::from_utf8
+            ),
+            |s: &str| s.replace("_", "")
+        )
+    )
 );
 
 /// hexnum: <hexdigit> (_? <hexdigit>)*
 named!(
     pub hexnum<String>,
-    map!(map_res!(recognize!(separated_nonempty_list_complete!(
-        tag!("_"),
-        nom::hex_digit
-    )), str::from_utf8), |s: &str| s.replace("_", ""))
+    parsing!(HexNum,
+        map!(
+            map_res!(
+                recognize!(
+                    separated_nonempty_list_complete!(tag!("_"), nom::hex_digit)
+                ),
+                str::from_utf8
+            ),
+            |s: &str| s.replace("_", "")
+        )
+    )
 );
 
 /// nat:    <num> | 0x<hexnum>
 named!(
     pub nat<isize>,
-    alt_complete!(
-        preceded!(
-            tag!("0x"),
-            map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16))
-        ) |
-        map_res!(num, |s: String| isize::from_str_radix(&s, 10))
+    parsing!(Nat,
+        alt_complete!(
+            preceded!(
+                tag!("0x"),
+                map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16))
+            ) |
+            map_res!(num, |s: String| isize::from_str_radix(&s, 10))
+        )
     )
 );
 
 named!(
     pub nat32<u32>,
-    alt_complete!(
-        preceded!(
-            tag!("0x"),
-            map_res!(hexnum, |s: String| u32::from_str_radix(&s, 16))
-        ) |
-        map_res!(num, |s: String| u32::from_str_radix(&s, 10))
+    parsing!(Nat32,
+        alt_complete!(
+            preceded!(
+                tag!("0x"),
+                map_res!(hexnum, |s: String| u32::from_str_radix(&s, 16))
+            ) |
+            map_res!(num, |s: String| u32::from_str_radix(&s, 10))
+        )
     )
 );
 
 /// int:    <nat> | +<nat> | -<nat>
 named!(
     pub int<isize>,
-    alt_complete!(
-        preceded!(tag!("+"), nat) |
-        map_res!(preceded!(tag!("-"), nat), |n: isize| {
-            n.checked_neg().ok_or_else(|| WastError::OutOfRange(n))
-        }) |
-        nat
+    parsing!(Integer,
+        alt_complete!(
+            preceded!(tag!("+"), nat) |
+            map_res!(preceded!(tag!("-"), nat), |n: isize| {
+                n.checked_neg().ok_or_else(|| WastError::OutOfRange(n))
+            }) |
+            nat
+        )
     )
 );
 
 named!(
     pub int32<i32>,
-    map!(verify!(int, |n| i32::MIN as isize <= n && n <= i32::MAX as isize), |n| n as i32)
+    parsing!(Int32,
+        map!(verify!(int, |n| i32::MIN as isize <= n && n <= i32::MAX as isize), |n| n as i32)
+    )
 );
 
 named!(
     pub int64<i64>,
-    map!(verify!(int, |n| i64::MIN as isize <= n && n <= i64::MAX as isize), |n| n as i64)
+    parsing!(Int64,
+        map!(verify!(int, |n| i64::MIN as isize <= n && n <= i64::MAX as isize), |n| n as i64)
+    )
 );
 
 /// float:  <num>.<num>?(e|E <num>)? | 0x<hexnum>.<hexnum>?(p|P <num>)?
 named!(
     pub float<String>,
-    map!(pair!(opt!(sign), alt_complete!(
-        preceded!(
-            tag!("0x"),
+    parsing!(Floating,
+        map!(pair!(opt!(sign), alt_complete!(
+            preceded!(
+                tag!("0x"),
+                tuple!(
+                    map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)),
+                    opt!(tag!(".")),
+                    opt!(complete!(map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)))),
+                    opt!(complete!(preceded!(tag_no_case!("p"), num)))
+                )
+            ) |
             tuple!(
-                map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)),
+                map_res!(num, |s: String| isize::from_str(&s)),
                 opt!(tag!(".")),
-                opt!(complete!(map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)))),
-                opt!(complete!(preceded!(tag_no_case!("p"), num)))
+                opt!(complete!(map_res!(num, |s: String| isize::from_str(&s)))),
+                opt!(complete!(preceded!(tag_no_case!("e"), num)))
             )
-        ) |
-        tuple!(
-            map_res!(num, |s: String| isize::from_str(&s)),
-            opt!(tag!(".")),
-            opt!(complete!(map_res!(num, |s: String| isize::from_str(&s)))),
-            opt!(complete!(preceded!(tag_no_case!("e"), num)))
-        )
-    )), |(sign, (num, _, frac, exp)): (Option<&str>, (isize, _, Option<isize>, Option<String>))| {
-        format!("{}{}.{}e{}", sign.unwrap_or_default(), num, frac.unwrap_or(0), exp.unwrap_or("0".to_owned()))
-    })
+        )), |(sign, (num, _, frac, exp)): (Option<&str>, (isize, _, Option<isize>, Option<String>))| {
+            format!("{}{}.{}e{}", sign.unwrap_or_default(), num, frac.unwrap_or(0), exp.unwrap_or("0".to_owned()))
+        })
+    )
 );
 
 named!(pub float32<f32>, map_res!(float, |s: String| {
@@ -115,12 +142,14 @@ named!(
 /// name:   $(<letter> | <digit> | _ | . | + | - | * | / | \ | ^ | ~ | = | < | > | ! | ? | @ | # | $ | % | & | | | : | ' | `)+
 named!(
     pub name<&str>,
-    map_res!(
-        preceded!(
-            tag!("$"),
-            take_while1!(|b| nom::is_alphanumeric(b) || SYMBOL.contains(&b))
-        ),
-        str::from_utf8
+    parsing!(Name,
+        map_res!(
+            preceded!(
+                tag!("$"),
+                take_while1!(|b| nom::is_alphanumeric(b) || SYMBOL.contains(&b))
+            ),
+            str::from_utf8
+        )
     )
 );
 
@@ -129,22 +158,24 @@ const SYMBOL: &[u8] = b"_.+-*/\\^~=<>!?@#$%&|:'`";
 /// string: "(<char> | \n | \t | \\ | \' | \" | \<hex><hex> | \u{<hex>+})*"
 named!(
     pub string<String>,
-    delimited!(
-        tag!("\""),
-        map!(
-            escaped_transform!(string_char, '\\',
-                alt!(
-                    tag!("r") => { |_| &b"\r"[..] } |
-                    tag!("n") => { |_| &b"\n"[..] } |
-                    tag!("t") => { |_| &b"\t"[..] } |
-                    tag!("\\") => { |_| &b"\\"[..] } |
-                    tag!("'") => { |_| &b"'"[..] } |
-                    tag!("\"") => { |_| &b"\""[..] }
-                )
+    parsing!(Str,
+        delimited!(
+            tag!("\""),
+            map!(
+                escaped_transform!(string_char, '\\',
+                    alt!(
+                        tag!("r") => { |_| &b"\r"[..] } |
+                        tag!("n") => { |_| &b"\n"[..] } |
+                        tag!("t") => { |_| &b"\t"[..] } |
+                        tag!("\\") => { |_| &b"\\"[..] } |
+                        tag!("'") => { |_| &b"'"[..] } |
+                        tag!("\"") => { |_| &b"\""[..] }
+                    )
+                ),
+                |s| String::from_utf8_lossy(&s).into_owned()
             ),
-            |s| String::from_utf8_lossy(&s).into_owned()
-        ),
-        tag!("\"")
+            tag!("\"")
+        )
     )
 );
 
@@ -152,7 +183,7 @@ fn string_char(input: &[u8]) -> IResult<&[u8], &[u8], u32> {
     match input.iter().position(|&b| b == b'\\' || b == b'\"') {
         None => IResult::Done(&input[input.len()..], input),
         Some(index) if index > 0 => IResult::Done(&input[index..], &input[..index]),
-        _ => IResult::Error(error_position!(ErrorKind::Tag, input)),
+        _ => IResult::Error(error_position!(Tag, input)),
     }
 }
 
@@ -181,9 +212,11 @@ impl Value {
 /// value:  <int> | <float>
 named!(
     pub value<Value>,
-    alt!(
-        int => { |v| Value::Int(v) } |
-        float64 => { |v| Value::Float(v) }
+    parsing!(Value,
+        alt_complete!(
+            int => { |v| Value::Int(v) } |
+            float64 => { |v| Value::Float(v) }
+        )
     )
 );
 
@@ -208,9 +241,11 @@ impl Var {
 /// var:    <nat> | <name>
 named!(
     pub var<Var>,
+    parsing!(Var,
         alt_complete!(
-        name => { |v: &str| Var::Name(v.to_owned()) } |
-        nat => { |v| Var::Index(v as u32) }
+            name => { |v: &str| Var::Name(v.to_owned()) } |
+            nat => { |v| Var::Index(v as u32) }
+        )
     )
 );
 
@@ -326,9 +361,11 @@ named_args!(
 #[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
     comment,
-    alt!(
-        preceded!(tag!("(;"), take_until_and_consume!(";)")) |
-        preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
+    parsing!(Comment,
+        alt!(
+            preceded!(tag!("(;"), take_until_and_consume!(";)")) |
+            preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
+        )
     )
 );
 
@@ -337,25 +374,26 @@ mod tests {
     use pretty_env_logger;
 
     use nom::Needed;
+    use nom::IResult::{Done, Error, Incomplete};
+    use nom::Err::{NodePosition, Position};
     use parity_wasm::elements::FunctionType;
 
     use super::*;
+    use errors::Parsing::*;
 
     #[test]
     fn parse_number() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"123", IResult::Done(&[][..], "123".to_owned())),
-            (
-                b"123_456 abc",
-                IResult::Done(&b" abc"[..], "123456".to_owned()),
-            ),
-            (
-                b"123_456_abc",
-                IResult::Done(&b"_abc"[..], "123456".to_owned()),
-            ),
+            (b"123", Done(&[][..], "123".to_owned())),
+            (b"123_456 abc", Done(&b" abc"[..], "123456".to_owned())),
+            (b"123_456_abc", Done(&b"_abc"[..], "123456".to_owned())),
             (
                 b"",
-                IResult::Error(nom::Err::Position(ErrorKind::Complete, &[][..])),
+                Error(NodePosition(
+                    Custom(Num as u32),
+                    &[][..],
+                    vec![Position(Complete, &[][..])],
+                )),
             ),
         ];
 
@@ -369,18 +407,16 @@ mod tests {
     #[test]
     fn parse_hexnum() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"123", IResult::Done(&[][..], "123".to_owned())),
-            (
-                b"123_456 abc",
-                IResult::Done(&b" abc"[..], "123456".to_owned()),
-            ),
-            (
-                b"123_456_abc",
-                IResult::Done(&b""[..], "123456abc".to_owned()),
-            ),
+            (b"123", Done(&[][..], "123".to_owned())),
+            (b"123_456 abc", Done(&b" abc"[..], "123456".to_owned())),
+            (b"123_456_abc", Done(&b""[..], "123456abc".to_owned())),
             (
                 b"",
-                IResult::Error(nom::Err::Position(ErrorKind::Complete, &[][..])),
+                Error(NodePosition(
+                    Custom(HexNum as u32),
+                    &[][..],
+                    vec![Position(Complete, &[][..])],
+                )),
             ),
         ];
 
@@ -394,12 +430,16 @@ mod tests {
     #[test]
     fn parse_nat() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"123", IResult::Done(&[][..], 123)),
-            (b"123_456 abc", IResult::Done(&b" abc"[..], 123_456)),
-            (b"0x123_456_abc", IResult::Done(&b""[..], 0x123_456_abc)),
+            (b"123", Done(&[][..], 123)),
+            (b"123_456 abc", Done(&b" abc"[..], 123_456)),
+            (b"0x123_456_abc", Done(&b""[..], 0x123_456_abc)),
             (
                 b"",
-                IResult::Error(nom::Err::Position(ErrorKind::Alt, &[][..])),
+                Error(NodePosition(
+                    Custom(Nat as u32),
+                    &[][..],
+                    vec![Position(Alt, &[][..])],
+                )),
             ),
         ];
 
@@ -413,15 +453,19 @@ mod tests {
     #[test]
     fn parse_int() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"+123", IResult::Done(&[][..], 123)),
-            (b"-123_456 abc", IResult::Done(&b" abc"[..], -123_456)),
+            (b"+123", Done(&[][..], 123)),
+            (b"-123_456 abc", Done(&b" abc"[..], -123_456)),
             (
                 b"0x1234_5678_90ab_cdef",
-                IResult::Done(&b""[..], 0x1234_5678_90ab_cdef),
+                Done(&b""[..], 0x1234_5678_90ab_cdef),
             ),
             (
                 b"",
-                IResult::Error(nom::Err::Position(ErrorKind::Alt, &[][..])),
+                Error(NodePosition(
+                    Custom(Integer as u32),
+                    &[][..],
+                    vec![Position(Alt, &[][..])],
+                )),
             ),
         ];
 
@@ -435,34 +479,38 @@ mod tests {
     #[test]
     fn parse_float() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"123.456e2", IResult::Done(&[][..], 123.456e2)),
-            (b"123.e2", IResult::Done(&[][..], 123.0e2)),
-            (b"123.456", IResult::Done(&[][..], 123.456)),
-            (b"123.", IResult::Done(&[][..], 123.0)),
-            (b"+123.456e2", IResult::Done(&[][..], 123.456e2)),
-            (b"+123.e2", IResult::Done(&[][..], 123.0e2)),
-            (b"+123.456", IResult::Done(&[][..], 123.456)),
-            (b"+123.", IResult::Done(&[][..], 123.0)),
-            (b"-123.456e2", IResult::Done(&[][..], -123.456e2)),
-            (b"-123.e2", IResult::Done(&[][..], -123.0e2)),
-            (b"-123.456", IResult::Done(&[][..], -123.456)),
-            (b"-123.", IResult::Done(&[][..], -123.0)),
-            (b"0x123.456p2", IResult::Done(&[][..], 29111.1)),
-            (b"0x123.p2", IResult::Done(&[][..], 29100.0)),
-            (b"0x123.456", IResult::Done(&[][..], 291.111)),
-            (b"0x123.", IResult::Done(&[][..], 291.0)),
-            (b"+0x123.456p2", IResult::Done(&[][..], 29111.1)),
-            (b"+0x123.p2", IResult::Done(&[][..], 29100.0)),
-            (b"+0x123.456", IResult::Done(&[][..], 291.111)),
-            (b"+0x123.", IResult::Done(&[][..], 291.0)),
-            (b"-0x123.456p2", IResult::Done(&[][..], -29111.1)),
-            (b"-0x123.p2", IResult::Done(&[][..], -29100.0)),
-            (b"-0x123.456", IResult::Done(&[][..], -291.111)),
-            (b"-0x123.", IResult::Done(&[][..], -291.0)),
-            (b"0x1p127", IResult::Done(&[][..], 1.0e127)),
+            (b"123.456e2", Done(&[][..], 123.456e2)),
+            (b"123.e2", Done(&[][..], 123.0e2)),
+            (b"123.456", Done(&[][..], 123.456)),
+            (b"123.", Done(&[][..], 123.0)),
+            (b"+123.456e2", Done(&[][..], 123.456e2)),
+            (b"+123.e2", Done(&[][..], 123.0e2)),
+            (b"+123.456", Done(&[][..], 123.456)),
+            (b"+123.", Done(&[][..], 123.0)),
+            (b"-123.456e2", Done(&[][..], -123.456e2)),
+            (b"-123.e2", Done(&[][..], -123.0e2)),
+            (b"-123.456", Done(&[][..], -123.456)),
+            (b"-123.", Done(&[][..], -123.0)),
+            (b"0x123.456p2", Done(&[][..], 29111.1)),
+            (b"0x123.p2", Done(&[][..], 29100.0)),
+            (b"0x123.456", Done(&[][..], 291.111)),
+            (b"0x123.", Done(&[][..], 291.0)),
+            (b"+0x123.456p2", Done(&[][..], 29111.1)),
+            (b"+0x123.p2", Done(&[][..], 29100.0)),
+            (b"+0x123.456", Done(&[][..], 291.111)),
+            (b"+0x123.", Done(&[][..], 291.0)),
+            (b"-0x123.456p2", Done(&[][..], -29111.1)),
+            (b"-0x123.p2", Done(&[][..], -29100.0)),
+            (b"-0x123.456", Done(&[][..], -291.111)),
+            (b"-0x123.", Done(&[][..], -291.0)),
+            (b"0x1p127", Done(&[][..], 1.0e127)),
             (
                 b"",
-                IResult::Error(nom::Err::Position(ErrorKind::Alt, &[][..])),
+                Error(NodePosition(
+                    Custom(Floating as u32),
+                    &[][..],
+                    vec![Position(Alt, &[][..])],
+                )),
             ),
         ];
 
@@ -476,13 +524,17 @@ mod tests {
     #[test]
     fn parse_name() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"$a", IResult::Done(&b""[..], "a")),
-            (b"$foo bar", IResult::Done(&b" bar"[..], "foo")),
-            (b"", IResult::Incomplete(Needed::Size(1))),
-            (b"$", IResult::Incomplete(Needed::Size(2))),
+            (b"$a", Done(&b""[..], "a")),
+            (b"$foo bar", Done(&b" bar"[..], "foo")),
+            (b"", Incomplete(Needed::Size(1))),
+            (b"$", Incomplete(Needed::Size(2))),
             (
                 b"+a",
-                IResult::Error(nom::Err::Position(ErrorKind::Tag, &b"+a"[..])),
+                Error(NodePosition(
+                    Custom(Name as u32),
+                    &b"+a"[..],
+                    vec![Position(Tag, &b"+a"[..])],
+                )),
             ),
         ];
 
@@ -496,15 +548,12 @@ mod tests {
     #[test]
     fn parse_string() {
         let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"\"hello world\"",
-                IResult::Done(&b""[..], "hello world".to_owned()),
-            ),
+            (b"\"hello world\"", Done(&b""[..], "hello world".to_owned())),
             (
                 b"\"hello \\r\\n\\t\\\\\\'\\\"world\"",
-                IResult::Done(&b""[..], "hello \r\n\t\\'\"world".to_owned()),
+                Done(&b""[..], "hello \r\n\t\\'\"world".to_owned()),
             ),
-            (b"", IResult::Incomplete(Needed::Size(1))),
+            (b"", Incomplete(Needed::Size(1))),
         ];
 
         for (code, ref result) in tests {
@@ -517,10 +566,10 @@ mod tests {
     #[test]
     fn parse_var() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"0", IResult::Done(&b""[..], Var::Index(0))),
+            (b"0", Done(&b""[..], super::Var::Index(0))),
             (
                 b"$done",
-                IResult::Done(&b""[..], Var::Name("done".to_owned())),
+                Done(&b""[..], super::Var::Name("done".to_owned())),
             ),
         ];
 
@@ -571,17 +620,14 @@ mod tests {
     #[test]
     fn parse_comment() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b";; foobar", IResult::Done(&[][..], &b" foobar"[..])),
-            (b";; foo\nbar", IResult::Done(&b"bar"[..], &b" foo\n"[..])),
-            (
-                b";; foo\r\nbar",
-                IResult::Done(&b"bar"[..], &b" foo\r\n"[..]),
-            ),
-            (b";; foo;;bar", IResult::Done(&b""[..], &b" foo;;bar"[..])),
-            (b"(;foobar;)", IResult::Done(&b""[..], &b"foobar"[..])),
+            (b";; foobar", Done(&[][..], &b" foobar"[..])),
+            (b";; foo\nbar", Done(&b"bar"[..], &b" foo\n"[..])),
+            (b";; foo\r\nbar", Done(&b"bar"[..], &b" foo\r\n"[..])),
+            (b";; foo;;bar", Done(&b""[..], &b" foo;;bar"[..])),
+            (b"(;foobar;)", Done(&b""[..], &b"foobar"[..])),
             (
                 b"(;foo(;foobar;)bar;)",
-                IResult::Done(&b"bar;)"[..], &b"foo(;foobar"[..]),
+                Done(&b"bar;)"[..], &b"foo(;foobar"[..]),
             ),
         ];
 

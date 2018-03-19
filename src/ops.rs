@@ -542,26 +542,23 @@ mod tests {
 
     use pretty_env_logger;
     use parity_wasm::elements::ValueType;
-    use nom::{self, ErrorKind, IResult};
+    use nom::ErrorKind::*;
+    use nom::IResult::*;
+    use nom::Err::*;
 
     use super::*;
+    use errors::Parsing::*;
 
     #[test]
     fn parse_simple_opcode() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"unreachable", IResult::Done(&[][..], Opcode::Unreachable)),
-            (b"nop", IResult::Done(&[][..], Opcode::Nop)),
-            (b"return", IResult::Done(&[][..], Opcode::Return)),
-            (b"drop", IResult::Done(&[][..], Opcode::Drop)),
-            (b"select", IResult::Done(&[][..], Opcode::Select)),
-            (
-                b"current_memory",
-                IResult::Done(&[][..], Opcode::CurrentMemory(0)),
-            ),
-            (
-                b"grow_memory",
-                IResult::Done(&[][..], Opcode::GrowMemory(0)),
-            ),
+            (b"unreachable", Done(&[][..], Opcode::Unreachable)),
+            (b"nop", Done(&[][..], Opcode::Nop)),
+            (b"return", Done(&[][..], Opcode::Return)),
+            (b"drop", Done(&[][..], Opcode::Drop)),
+            (b"select", Done(&[][..], Opcode::Select)),
+            (b"current_memory", Done(&[][..], Opcode::CurrentMemory(0))),
+            (b"grow_memory", Done(&[][..], Opcode::GrowMemory(0))),
         ];
         let labels = NameMap::default();
         let globals = NameMap::default();
@@ -582,25 +579,22 @@ mod tests {
     #[test]
     fn parse_block() {
         let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"block",
-                IResult::Done(&[][..], Opcode::Block(BlockType::NoResult)),
-            ),
+            (b"block", Done(&[][..], Opcode::Block(BlockType::NoResult))),
             (
                 b"block $exit",
-                IResult::Done(&[][..], Opcode::Block(BlockType::NoResult)),
+                Done(&[][..], Opcode::Block(BlockType::NoResult)),
             ),
             (
                 b"block (result i32)",
-                IResult::Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
             ),
             (
                 b"block $done (result i32)",
-                IResult::Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
             ),
             (
                 b"block i32",
-                IResult::Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
             ),
         ];
 
@@ -614,25 +608,22 @@ mod tests {
     #[test]
     fn parse_loop() {
         let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"loop",
-                IResult::Done(&[][..], Opcode::Loop(BlockType::NoResult)),
-            ),
+            (b"loop", Done(&[][..], Opcode::Loop(BlockType::NoResult))),
             (
                 b"loop $exit",
-                IResult::Done(&[][..], Opcode::Loop(BlockType::NoResult)),
+                Done(&[][..], Opcode::Loop(BlockType::NoResult)),
             ),
             (
                 b"loop (result i32)",
-                IResult::Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
             ),
             (
                 b"loop $done (result i32)",
-                IResult::Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
             ),
             (
                 b"loop i32",
-                IResult::Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
             ),
         ];
 
@@ -646,25 +637,19 @@ mod tests {
     #[test]
     fn parse_if() {
         let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"if",
-                IResult::Done(&[][..], Opcode::If(BlockType::NoResult)),
-            ),
-            (
-                b"if $exit",
-                IResult::Done(&[][..], Opcode::If(BlockType::NoResult)),
-            ),
+            (b"if", Done(&[][..], Opcode::If(BlockType::NoResult))),
+            (b"if $exit", Done(&[][..], Opcode::If(BlockType::NoResult))),
             (
                 b"if (result i32)",
-                IResult::Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
             ),
             (
                 b"if $done (result i32)",
-                IResult::Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
             ),
             (
                 b"if i32",
-                IResult::Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
+                Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
             ),
         ];
 
@@ -678,8 +663,8 @@ mod tests {
     #[test]
     fn parse_else() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"else", IResult::Done(&[][..], Opcode::Else)),
-            (b"else $exit", IResult::Done(&[][..], Opcode::Else)),
+            (b"else", Done(&[][..], Opcode::Else)),
+            (b"else $exit", Done(&[][..], Opcode::Else)),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -692,8 +677,8 @@ mod tests {
     #[test]
     fn parse_end() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"end", IResult::Done(&[][..], Opcode::End)),
-            (b"end $exit", IResult::Done(&[][..], Opcode::End)),
+            (b"end", Done(&[][..], Opcode::End)),
+            (b"end $exit", Done(&[][..], Opcode::End)),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -706,8 +691,8 @@ mod tests {
     #[test]
     fn parse_br() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"br 0", IResult::Done(&[][..], Opcode::Br(0))),
-            (b"br $done", IResult::Done(&[][..], Opcode::Br(123))),
+            (b"br 0", Done(&[][..], Opcode::Br(0))),
+            (b"br $done", Done(&[][..], Opcode::Br(123))),
         ];
         let mut labels = NameMap::default();
 
@@ -723,8 +708,8 @@ mod tests {
     #[test]
     fn parse_br_if() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"br_if 0", IResult::Done(&[][..], Opcode::BrIf(0))),
-            (b"br_if $done", IResult::Done(&[][..], Opcode::BrIf(123))),
+            (b"br_if 0", Done(&[][..], Opcode::BrIf(0))),
+            (b"br_if $done", Done(&[][..], Opcode::BrIf(123))),
         ];
         let mut labels = NameMap::default();
 
@@ -742,15 +727,15 @@ mod tests {
         let tests: Vec<(&[u8], _)> = vec![
             (
                 b"br_table 0",
-                IResult::Done(&[][..], Opcode::BrTable(Box::new([]), 0)),
+                Done(&[][..], Opcode::BrTable(Box::new([]), 0)),
             ),
             (
                 b"br_table 0 0",
-                IResult::Done(&[][..], Opcode::BrTable(Box::new([0]), 0)),
+                Done(&[][..], Opcode::BrTable(Box::new([0]), 0)),
             ),
             (
                 b"br_table 3 2 1 0 4",
-                IResult::Done(&[][..], Opcode::BrTable(Box::new([3, 2, 1, 0]), 4)),
+                Done(&[][..], Opcode::BrTable(Box::new([3, 2, 1, 0]), 4)),
             ),
         ];
         let labels = NameMap::default();
@@ -768,8 +753,8 @@ mod tests {
     #[test]
     fn parse_call() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"call 0", IResult::Done(&[][..], Opcode::Call(0))),
-            (b"call $hello", IResult::Done(&[][..], Opcode::Call(123))),
+            (b"call 0", Done(&[][..], Opcode::Call(0))),
+            (b"call $hello", Done(&[][..], Opcode::Call(123))),
         ];
         let mut funcs = FunctionNameSection::default();
 
@@ -785,8 +770,8 @@ mod tests {
     #[test]
     fn parse_type_use() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"(type 123)", IResult::Done(&[][..], 123)),
-            (b"(type $hello)", IResult::Done(&[][..], 123)),
+            (b"(type 123)", Done(&[][..], 123)),
+            (b"(type $hello)", Done(&[][..], 123)),
         ];
         let mut funcs = FunctionNameSection::default();
 
@@ -807,23 +792,23 @@ mod tests {
         let call_indirect_tests: Vec<(&[u8], _)> = vec![
             (
                 b"call_indirect 123",
-                IResult::Done(&[][..], Opcode::CallIndirect(123, 0)),
+                Done(&[][..], Opcode::CallIndirect(123, 0)),
             ),
             (
                 b"call_indirect $hello",
-                IResult::Done(&[][..], Opcode::CallIndirect(123, 0)),
+                Done(&[][..], Opcode::CallIndirect(123, 0)),
             ),
             (
                 b"call_indirect (type $hello)",
-                IResult::Done(&[][..], Opcode::CallIndirect(123, 0)),
+                Done(&[][..], Opcode::CallIndirect(123, 0)),
             ),
             (
                 b"call_indirect (param i32)",
-                IResult::Done(&[][..], Opcode::CallIndirect(0, 0)),
+                Done(&[][..], Opcode::CallIndirect(0, 0)),
             ),
             (
                 b"call_indirect (param i64)",
-                IResult::Done(&[][..], Opcode::CallIndirect(1, 0)),
+                Done(&[][..], Opcode::CallIndirect(1, 0)),
             ),
         ];
         let mut funcs = FunctionNameSection::default();
@@ -854,37 +839,16 @@ mod tests {
     #[test]
     fn parse_get_local() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"get_local 0", IResult::Done(&[][..], Opcode::GetLocal(0))),
-            (
-                b"get_local $l",
-                IResult::Done(&[][..], Opcode::GetLocal(123)),
-            ),
-            (b"set_local 0", IResult::Done(&[][..], Opcode::SetLocal(0))),
-            (
-                b"set_local $l",
-                IResult::Done(&[][..], Opcode::SetLocal(123)),
-            ),
-            (b"tee_local 0", IResult::Done(&[][..], Opcode::TeeLocal(0))),
-            (
-                b"tee_local $l",
-                IResult::Done(&[][..], Opcode::TeeLocal(123)),
-            ),
-            (
-                b"get_global 0",
-                IResult::Done(&[][..], Opcode::GetGlobal(0)),
-            ),
-            (
-                b"get_global $g",
-                IResult::Done(&[][..], Opcode::GetGlobal(123)),
-            ),
-            (
-                b"set_global 0",
-                IResult::Done(&[][..], Opcode::SetGlobal(0)),
-            ),
-            (
-                b"set_global $g",
-                IResult::Done(&[][..], Opcode::SetGlobal(123)),
-            ),
+            (b"get_local 0", Done(&[][..], Opcode::GetLocal(0))),
+            (b"get_local $l", Done(&[][..], Opcode::GetLocal(123))),
+            (b"set_local 0", Done(&[][..], Opcode::SetLocal(0))),
+            (b"set_local $l", Done(&[][..], Opcode::SetLocal(123))),
+            (b"tee_local 0", Done(&[][..], Opcode::TeeLocal(0))),
+            (b"tee_local $l", Done(&[][..], Opcode::TeeLocal(123))),
+            (b"get_global 0", Done(&[][..], Opcode::GetGlobal(0))),
+            (b"get_global $g", Done(&[][..], Opcode::GetGlobal(123))),
+            (b"set_global 0", Done(&[][..], Opcode::SetGlobal(0))),
+            (b"set_global $g", Done(&[][..], Opcode::SetGlobal(123))),
         ];
         let labels = NameMap::default();
         let mut globals = NameMap::default();
@@ -908,8 +872,8 @@ mod tests {
     #[test]
     fn parse_offset() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"offset=1234", IResult::Done(&b""[..], 1234)),
-            (b"offset=0xABCD", IResult::Done(&b""[..], 0xABCD)),
+            (b"offset=1234", Done(&b""[..], 1234)),
+            (b"offset=0xABCD", Done(&b""[..], 0xABCD)),
         ];
 
         for (code, ref result) in tests {
@@ -921,7 +885,7 @@ mod tests {
 
     #[test]
     fn parse_align() {
-        let tests: Vec<(&[u8], _)> = vec![(b"align=8", IResult::Done(&b""[..], 8))];
+        let tests: Vec<(&[u8], _)> = vec![(b"align=8", Done(&b""[..], 8))];
 
         for (code, ref result) in tests {
             assert_eq!(align(code), *result, "parse align: {}", unsafe {
@@ -933,70 +897,34 @@ mod tests {
     #[test]
     fn parse_load() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"i32.load", IResult::Done(&[][..], Opcode::I32Load(0, 0))),
-            (b"i64.load", IResult::Done(&[][..], Opcode::I64Load(0, 0))),
-            (b"f32.load", IResult::Done(&[][..], Opcode::F32Load(0, 0))),
-            (b"f64.load", IResult::Done(&[][..], Opcode::F64Load(0, 0))),
-            (
-                b"i32.load8_s",
-                IResult::Done(&[][..], Opcode::I32Load8S(0, 0)),
-            ),
-            (
-                b"i32.load8_u",
-                IResult::Done(&[][..], Opcode::I32Load8U(0, 0)),
-            ),
-            (
-                b"i32.load16_s",
-                IResult::Done(&[][..], Opcode::I32Load16S(0, 0)),
-            ),
-            (
-                b"i32.load16_u",
-                IResult::Done(&[][..], Opcode::I32Load16U(0, 0)),
-            ),
-            (
-                b"i64.load8_s",
-                IResult::Done(&[][..], Opcode::I64Load8S(0, 0)),
-            ),
-            (
-                b"i64.load8_u",
-                IResult::Done(&[][..], Opcode::I64Load8U(0, 0)),
-            ),
-            (
-                b"i64.load16_s",
-                IResult::Done(&[][..], Opcode::I64Load16S(0, 0)),
-            ),
-            (
-                b"i64.load16_u",
-                IResult::Done(&[][..], Opcode::I64Load16U(0, 0)),
-            ),
-            (
-                b"i64.load32_s",
-                IResult::Done(&[][..], Opcode::I64Load32S(0, 0)),
-            ),
-            (
-                b"i64.load32_u",
-                IResult::Done(&[][..], Opcode::I64Load32U(0, 0)),
-            ),
-            (
-                b"i64.load offset=4",
-                IResult::Done(&[][..], Opcode::I64Load(0, 4)),
-            ),
+            (b"i32.load", Done(&[][..], Opcode::I32Load(0, 0))),
+            (b"i64.load", Done(&[][..], Opcode::I64Load(0, 0))),
+            (b"f32.load", Done(&[][..], Opcode::F32Load(0, 0))),
+            (b"f64.load", Done(&[][..], Opcode::F64Load(0, 0))),
+            (b"i32.load8_s", Done(&[][..], Opcode::I32Load8S(0, 0))),
+            (b"i32.load8_u", Done(&[][..], Opcode::I32Load8U(0, 0))),
+            (b"i32.load16_s", Done(&[][..], Opcode::I32Load16S(0, 0))),
+            (b"i32.load16_u", Done(&[][..], Opcode::I32Load16U(0, 0))),
+            (b"i64.load8_s", Done(&[][..], Opcode::I64Load8S(0, 0))),
+            (b"i64.load8_u", Done(&[][..], Opcode::I64Load8U(0, 0))),
+            (b"i64.load16_s", Done(&[][..], Opcode::I64Load16S(0, 0))),
+            (b"i64.load16_u", Done(&[][..], Opcode::I64Load16U(0, 0))),
+            (b"i64.load32_s", Done(&[][..], Opcode::I64Load32S(0, 0))),
+            (b"i64.load32_u", Done(&[][..], Opcode::I64Load32U(0, 0))),
+            (b"i64.load offset=4", Done(&[][..], Opcode::I64Load(0, 4))),
             (
                 b"i32.load8_s align=8",
-                IResult::Done(&[][..], Opcode::I32Load8S(8, 0)),
+                Done(&[][..], Opcode::I32Load8S(8, 0)),
             ),
             (
                 b"i32.load8_u offset=4 align=8",
-                IResult::Done(&[][..], Opcode::I32Load8U(8, 4)),
+                Done(&[][..], Opcode::I32Load8U(8, 4)),
             ),
             (
                 b"i32.load8_s align=3",
-                IResult::Error(nom::Err::Position(ErrorKind::Verify, &b"align=3"[..])),
+                Error(Position(Verify, &b"align=3"[..])),
             ),
-            (
-                b"f32.load8_s",
-                IResult::Error(nom::Err::Position(ErrorKind::Switch, &b""[..])),
-            ),
+            (b"f32.load8_s", Error(Position(Switch, &b""[..]))),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -1009,38 +937,29 @@ mod tests {
     #[test]
     fn parse_store() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"i32.store", IResult::Done(&[][..], Opcode::I32Store(0, 0))),
-            (b"i64.store", IResult::Done(&[][..], Opcode::I64Store(0, 0))),
-            (b"f32.store", IResult::Done(&[][..], Opcode::F32Store(0, 0))),
-            (b"f64.store", IResult::Done(&[][..], Opcode::F64Store(0, 0))),
-            (
-                b"i32.store8",
-                IResult::Done(&[][..], Opcode::I32Store8(0, 0)),
-            ),
-            (
-                b"i32.store16",
-                IResult::Done(&[][..], Opcode::I32Store16(0, 0)),
-            ),
+            (b"i32.store", Done(&[][..], Opcode::I32Store(0, 0))),
+            (b"i64.store", Done(&[][..], Opcode::I64Store(0, 0))),
+            (b"f32.store", Done(&[][..], Opcode::F32Store(0, 0))),
+            (b"f64.store", Done(&[][..], Opcode::F64Store(0, 0))),
+            (b"i32.store8", Done(&[][..], Opcode::I32Store8(0, 0))),
+            (b"i32.store16", Done(&[][..], Opcode::I32Store16(0, 0))),
             (
                 b"i64.store8 offset=4",
-                IResult::Done(&[][..], Opcode::I64Store8(0, 4)),
+                Done(&[][..], Opcode::I64Store8(0, 4)),
             ),
             (
                 b"i64.store16 align=8",
-                IResult::Done(&[][..], Opcode::I64Store16(8, 0)),
+                Done(&[][..], Opcode::I64Store16(8, 0)),
             ),
             (
                 b"i64.store32 offset=4 align=8",
-                IResult::Done(&[][..], Opcode::I64Store32(8, 4)),
+                Done(&[][..], Opcode::I64Store32(8, 4)),
             ),
             (
                 b"i32.store32 align=3",
-                IResult::Error(nom::Err::Position(ErrorKind::Verify, &b"align=3"[..])),
+                Error(Position(Verify, &b"align=3"[..])),
             ),
-            (
-                b"f32.store8_s",
-                IResult::Error(nom::Err::Position(ErrorKind::Switch, &b"_s"[..])),
-            ),
+            (b"f32.store8_s", Error(Position(Switch, &b"_s"[..]))),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -1055,40 +974,44 @@ mod tests {
         let tests: Vec<(&[u8], _)> = vec![
             (
                 b"i32.const 0xffffffff",
-                IResult::Error(nom::Err::NodePosition(
-                    ErrorKind::Switch,
+                Error(NodePosition(
+                    Switch,
                     &b"i32.const 0xffffffff"[..],
-                    vec![nom::Err::Position(ErrorKind::Verify, &b"0xffffffff"[..])],
+                    vec![
+                        Position(Verify, &b"0xffffffff"[..]),
+                        Position(Custom(Int32 as u32), &b"0xffffffff"[..]),
+                    ],
                 )),
             ),
             (
                 b"i32.const -0x80000000",
-                IResult::Done(&[][..], Opcode::I32Const(-0x80000000)),
+                Done(&[][..], Opcode::I32Const(-0x80000000)),
             ),
             (
                 b"i64.const 18446744073709551615",
-                IResult::Error(nom::Err::NodePosition(
-                    ErrorKind::Switch,
+                Error(NodePosition(
+                    Switch,
                     &b"i64.const 18446744073709551615"[..],
                     vec![
-                        nom::Err::Position(ErrorKind::Alt, &b"18446744073709551615"[..]),
+                        Position(Alt, &b"18446744073709551615"[..]),
+                        Position(Custom(Integer as u32), &b"18446744073709551615"[..]),
+                        Position(Custom(Int64 as u32), &b"18446744073709551615"[..]),
                     ],
                 )),
             ),
             (
                 b"i64.const -9223372036854775808",
-                IResult::Error(nom::Err::NodePosition(
-                    ErrorKind::Switch,
+                Error(NodePosition(
+                    Switch,
                     &b"i64.const -9223372036854775808"[..],
                     vec![
-                        nom::Err::Position(ErrorKind::Alt, &b"-9223372036854775808"[..]),
+                        Position(Alt, &b"-9223372036854775808"[..]),
+                        Position(Custom(Integer as u32), &b"-9223372036854775808"[..]),
+                        Position(Custom(Int64 as u32), &b"-9223372036854775808"[..]),
                     ],
                 )),
             ),
-            (
-                b"f32.const 0x1p127",
-                IResult::Done(&[][..], Opcode::F32Const(0)),
-            ),
+            (b"f32.const 0x1p127", Done(&[][..], Opcode::F32Const(0))),
         ];
 
         for (code, ref result) in tests {

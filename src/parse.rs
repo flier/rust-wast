@@ -1,11 +1,13 @@
 use std::{i32, i64};
 use std::str::{self, FromStr};
 
-use failure::Error;
+use failure::{err_msg, Error};
 use nom::{self, ErrorKind, IResult};
-use parity_wasm::elements::{ExportEntry, GlobalType, Internal, NameMap, ValueType};
+use parity_wasm::elements::{ExportEntry, External, GlobalType, ImportEntry, Internal, MemoryType,
+                            NameMap, TableType, Type, ValueType};
 
 use errors::WastError;
+use func::func_type;
 
 /// num:    <digit> (_? <digit>)*
 named!(
@@ -38,13 +40,13 @@ named!(
 );
 
 named!(
-    pub nat32<i32>,
+    pub nat32<u32>,
     alt_complete!(
         preceded!(
             tag!("0x"),
-            map_res!(hexnum, |s: String| i32::from_str_radix(&s, 16))
+            map_res!(hexnum, |s: String| u32::from_str_radix(&s, 16))
         ) |
-        map_res!(num, |s: String| i32::from_str_radix(&s, 10))
+        map_res!(num, |s: String| u32::from_str_radix(&s, 10))
     )
 );
 
@@ -250,6 +252,53 @@ named!(
     ))
 );
 
+named!(elem_type, tag!("anyfunc"));
+
+named!(
+    table_type<TableType>,
+    map!(
+        ws!(tuple!(nat32, opt!(nat32), elem_type)),
+        |(min, max, _)| TableType::new(min, max)
+    )
+);
+
+named!(
+    memory_type<MemoryType>,
+    map!(ws!(pair!(nat32, opt!(nat32))), |(min, max)| {
+        MemoryType::new(min, max)
+    })
+);
+
+named_args!(
+    import<'a>(funcs: &'a mut Vec<Type>)<ImportEntry>,
+    map!(
+        dbg_dmp!(ws!(tuple!(tag!("import"), string, string, apply!(imkind, funcs)))),
+        |(_, module, field, external)| ImportEntry::new(module, field, external)
+    )
+);
+
+named_args!(
+    imkind<'a>(funcs: &'a mut Vec<Type>)<External>,
+    delimited!(
+        tag!("("),
+        alt!(
+            ws!(tuple!(tag!("func"), opt!(name), map!(map!(func_type, |ty| Type::Function(ty)), |func_type| {
+                if let Some(idx) = funcs.iter().position(|ty| { func_type == *ty }) {
+                    idx as u32
+                } else {
+                    let idx = funcs.len();
+                    funcs.push(func_type);
+                    idx as u32
+                }
+            }))) => { |(_, name, idx)| External::Function(idx) } |
+            ws!(tuple!(tag!("global"), opt!(name), global_type)) => { |(_, name, ty)| External::Global(ty) } |
+            ws!(tuple!(tag!("table"), opt!(name), table_type)) => { |(_, name, ty)| External::Table(ty) } |
+            ws!(tuple!(tag!("memory"), opt!(name), memory_type)) => { |(_, name, ty)| External::Memory(ty) }
+        ),
+        tag!(")")
+    )
+);
+
 named_args!(
     export_entry<'a>(types: &'a NameMap)<ExportEntry>,
     ws!(
@@ -288,6 +337,7 @@ mod tests {
     use pretty_env_logger;
 
     use nom::Needed;
+    use parity_wasm::elements::FunctionType;
 
     use super::*;
 
@@ -303,7 +353,10 @@ mod tests {
                 b"123_456_abc",
                 IResult::Done(&b"_abc"[..], "123456".to_owned()),
             ),
-            (b"", IResult::Error(ErrorKind::Complete)),
+            (
+                b"",
+                IResult::Error(nom::Err::Position(ErrorKind::Complete, &[][..])),
+            ),
         ];
 
         for (code, ref result) in tests {
@@ -325,7 +378,10 @@ mod tests {
                 b"123_456_abc",
                 IResult::Done(&b""[..], "123456abc".to_owned()),
             ),
-            (b"", IResult::Error(ErrorKind::Complete)),
+            (
+                b"",
+                IResult::Error(nom::Err::Position(ErrorKind::Complete, &[][..])),
+            ),
         ];
 
         for (code, ref result) in tests {
@@ -341,7 +397,10 @@ mod tests {
             (b"123", IResult::Done(&[][..], 123)),
             (b"123_456 abc", IResult::Done(&b" abc"[..], 123_456)),
             (b"0x123_456_abc", IResult::Done(&b""[..], 0x123_456_abc)),
-            (b"", IResult::Error(ErrorKind::Alt)),
+            (
+                b"",
+                IResult::Error(nom::Err::Position(ErrorKind::Alt, &[][..])),
+            ),
         ];
 
         for (code, ref result) in tests {
@@ -360,7 +419,10 @@ mod tests {
                 b"0x1234_5678_90ab_cdef",
                 IResult::Done(&b""[..], 0x1234_5678_90ab_cdef),
             ),
-            (b"", IResult::Error(ErrorKind::Alt)),
+            (
+                b"",
+                IResult::Error(nom::Err::Position(ErrorKind::Alt, &[][..])),
+            ),
         ];
 
         for (code, ref result) in tests {
@@ -398,7 +460,10 @@ mod tests {
             (b"-0x123.456", IResult::Done(&[][..], -291.111)),
             (b"-0x123.", IResult::Done(&[][..], -291.0)),
             (b"0x1p127", IResult::Done(&[][..], 1.0e127)),
-            (b"", IResult::Error(ErrorKind::Alt)),
+            (
+                b"",
+                IResult::Error(nom::Err::Position(ErrorKind::Alt, &[][..])),
+            ),
         ];
 
         for (code, ref result) in tests {
@@ -415,7 +480,10 @@ mod tests {
             (b"$foo bar", IResult::Done(&b" bar"[..], "foo")),
             (b"", IResult::Incomplete(Needed::Size(1))),
             (b"$", IResult::Incomplete(Needed::Size(2))),
-            (b"+a", IResult::Error(ErrorKind::Tag)),
+            (
+                b"+a",
+                IResult::Error(nom::Err::Position(ErrorKind::Tag, &b"+a"[..])),
+            ),
         ];
 
         for (code, ref result) in tests {
@@ -521,6 +589,50 @@ mod tests {
             assert_eq!(comment(code), result, "parse comment: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
+        }
+    }
+
+    #[test]
+    fn parse_import() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                br#"import "spectest" "print_i32" (func (param i64))"#,
+                ("spectest", "print_i32", External::Function(1)),
+            ),
+            (
+                br#"import "spectest" "print_f64_f64" (func $print_f64_f64 (param f64 f64))"#,
+                ("spectest", "print_f64_f64", External::Function(2)),
+            ),
+        ];
+
+        let mut funcs = vec![
+            Type::Function(FunctionType::new(vec![ValueType::I32], None)),
+            Type::Function(FunctionType::new(vec![ValueType::I64], None)),
+        ];
+
+        for (code, (module, field, external)) in tests {
+            let res = import(code, &mut funcs);
+
+            trace_parse_error!(code, res);
+
+            assert!(
+                res.is_done(),
+                "parse code: {}, err: {:?}",
+                unsafe { str::from_utf8_unchecked(code) },
+                res
+            );
+
+            let (remaining, import) = res.unwrap();
+
+            assert_eq!(remaining, &b""[..], "parse code: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            },);
+            assert_eq!(import.module(), module);
+            assert_eq!(import.field(), field);
+            assert_eq!(
+                format!("{:?}", import.external()),
+                format!("{:?}", external)
+            );
         }
     }
 }

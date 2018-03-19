@@ -3,8 +3,8 @@ use std::str::{self, FromStr};
 
 use failure::Error;
 use nom::{self, ErrorKind, IResult};
-use parity_wasm::elements::{ExportEntry, External, GlobalType, ImportEntry, Internal, MemoryType,
-                            NameMap, TableType, Type, TypeSection, ValueType};
+use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, GlobalType, ImportEntry,
+                            Internal, MemoryType, NameMap, TableType, Type, TypeSection, ValueType};
 
 use errors::WastError;
 use func::func_type;
@@ -300,7 +300,7 @@ named_args!(
 );
 
 named_args!(
-    export_entry<'a>(types: &'a NameMap)<ExportEntry>,
+    export_entry<'a>(funcs: &'a FunctionNameSection)<ExportEntry>,
     ws!(
         do_parse!(
             field: ws!(preceded!(tag!("export"), string)) >>
@@ -308,7 +308,7 @@ named_args!(
                 tag!("("),
                 pair!(
                     alt!(tag!("func") | tag!("table") | tag!("memory") | tag!("global")),
-                    map_res!(var, |var: Var| var.resolve_ref(types))
+                    map_res!(var, |var: Var| var.resolve_ref(funcs.names()))
                 ),
                 tag!(")")
             )) >>
@@ -556,12 +556,12 @@ mod tests {
             (b"export \"a\" (memory $a)", "a"),
         ];
 
-        let mut types = NameMap::default();
+        let mut funcs = FunctionNameSection::default();
 
-        types.insert(123, "a".to_owned());
+        funcs.names_mut().insert(123, "a".to_owned());
 
         for (code, field) in tests {
-            let (remaining, export) = export_entry(code, &types).unwrap();
+            let (remaining, export) = export_entry(code, &funcs).unwrap();
 
             assert!(remaining.is_empty());
             assert_eq!(export.field(), field);

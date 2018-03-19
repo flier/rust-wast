@@ -4,13 +4,18 @@ use std::usize;
 use parity_wasm::elements::NameMap;
 
 use failure::Error;
-use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type, TypeSection};
+use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, Opcode, Type,
+                            TypeSection};
 
 use parse::{int_type, name, value_type, var, Var, float32, float64, int32, int64, nat32};
 use func::{param, result};
 
 named_args!(
-    opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut TypeSection)<Opcode>,
+    opcode<'a>(labels: &'a NameMap,
+               globals: &'a NameMap,
+               locals: &'a NameMap,
+               funcs: &'a FunctionNameSection,
+               signatures: &'a mut TypeSection)<Opcode>,
     alt!(
         tag!("unreachable") => { |_| Opcode::Unreachable } |
         tag!("nop") => { |_| Opcode::Nop } |
@@ -25,17 +30,17 @@ named_args!(
         apply!(br_table, labels) |
         tag!("return") => { |_| Opcode::Return } |
 
-        apply!(call, types) |
-        apply!(call_indirect, types, funcs) |
+        apply!(call, funcs) |
+        apply!(call_indirect, funcs, signatures) |
 
         tag!("drop") => { |_| Opcode::Drop } |
         tag!("select") => { |_| Opcode::Select } |
 
-        apply!(get_local, types) |
-        apply!(set_local, types) |
-        apply!(tee_local, types) |
-        apply!(get_global, types) |
-        apply!(set_global, types) |
+        apply!(get_local, locals) |
+        apply!(set_local, locals) |
+        apply!(tee_local, locals) |
+        apply!(get_global, globals) |
+        apply!(set_global, globals) |
 
         load |
         store |
@@ -148,30 +153,30 @@ named_args!(
 );
 
 named_args!(
-    call<'a>(types: &'a NameMap)<Opcode>,
+    call<'a>(funcs: &'a FunctionNameSection)<Opcode>,
     map_res!(
         ws!(preceded!(tag!("call"), var)),
-        |func: Var| func.resolve_ref(types).map(Opcode::Call)
+        |func: Var| func.resolve_ref(funcs.names()).map(Opcode::Call)
     )
 );
 
 named_args!(
-    pub type_use<'a>(types: &'a NameMap)<u32>,
+    pub type_use<'a>(funcs: &'a FunctionNameSection)<u32>,
     ws!(delimited!(
         tag!("("),
         preceded!(
             tag!("type"),
-            map_res!(var, |var: Var| var.resolve_ref(types))
+            map_res!(var, |var: Var| var.resolve_ref(funcs.names()))
         ),
         tag!(")")
     ))
 );
 
 named_args!(
-    call_instr_type<'a>(types: &'a NameMap)<(Option<u32>, Option<FunctionType>)>,
+    call_instr_type<'a>(funcs: &'a FunctionNameSection)<(Option<u32>, Option<FunctionType>)>,
     alt!(
-        map_res!(var, |var: Var| var.resolve_ref(types)) => { |idx| (Some(idx), None) } |
-        ws!(pair!(opt!(apply!(type_use, types)), opt!(complete!(call_instr_params))))
+        map_res!(var, |var: Var| var.resolve_ref(funcs.names())) => { |idx| (Some(idx), None) } |
+        ws!(pair!(opt!(apply!(type_use, funcs)), opt!(complete!(call_instr_params))))
     )
 );
 
@@ -187,18 +192,18 @@ named!(
 );
 
 named_args!(
-    call_indirect<'a>(types: &'a NameMap, funcs: &'a mut TypeSection)<Opcode>,
-    ws!(preceded!(tag!("call_indirect"), map!(apply!(call_instr_type, types),
+    call_indirect<'a>(funcs: &'a FunctionNameSection, signatures: &'a mut TypeSection)<Opcode>,
+    ws!(preceded!(tag!("call_indirect"), map!(apply!(call_instr_type, funcs),
         |(type_use, func_type): (Option<u32>, Option<FunctionType>)|
             if let Some(idx) = type_use {
                 Opcode::CallIndirect(idx, 0)
             } else if let Some(func_type) = func_type {
-                if let Some(idx) = funcs.types().iter().position(|ty| { Type::Function(func_type.clone()) == *ty }) {
+                if let Some(idx) = signatures.types().iter().position(|ty| { Type::Function(func_type.clone()) == *ty }) {
                     Opcode::CallIndirect(idx as u32, 0)
                 } else {
-                    let idx = funcs.types().len();
+                    let idx = signatures.types().len();
 
-                    funcs.types_mut().push(Type::Function(func_type));
+                    signatures.types_mut().push(Type::Function(func_type));
 
                     Opcode::CallIndirect(idx as u32, 0)
                 }
@@ -210,31 +215,31 @@ named_args!(
 );
 
 named_args!(
-    get_local<'a>(types: &'a NameMap)<Opcode>,
+    get_local<'a>(locals: &'a NameMap)<Opcode>,
     map!(
         map_res!(
             ws!(preceded!(tag!("get_local"), var)),
-            |var: Var| var.resolve_ref(types)
+            |var: Var| var.resolve_ref(locals)
         ),
     Opcode::GetLocal)
 );
 
 named_args!(
-    set_local<'a>(types: &'a NameMap)<Opcode>,
+    set_local<'a>(locals: &'a NameMap)<Opcode>,
     map!(
         map_res!(
             ws!(preceded!(tag!("set_local"), var)),
-            |var: Var| var.resolve_ref(types)
+            |var: Var| var.resolve_ref(locals)
         ),
     Opcode::SetLocal)
 );
 
 named_args!(
-    tee_local<'a>(types: &'a NameMap)<Opcode>,
+    tee_local<'a>(locals: &'a NameMap)<Opcode>,
     map!(
         map_res!(
             ws!(preceded!(tag!("tee_local"), var)),
-            |var: Var| var.resolve_ref(types)
+            |var: Var| var.resolve_ref(locals)
         ),
     Opcode::TeeLocal)
 );
@@ -559,12 +564,14 @@ mod tests {
             ),
         ];
         let labels = NameMap::default();
-        let types = NameMap::default();
-        let mut funcs = TypeSection::with_types(vec![]);
+        let globals = NameMap::default();
+        let locals = NameMap::default();
+        let funcs = FunctionNameSection::default();
+        let mut signatures = TypeSection::with_types(vec![]);
 
         for &(code, ref result) in tests.iter() {
             assert_eq!(
-                opcode(code, &labels, &types, &mut funcs),
+                opcode(code, &labels, &globals, &locals, &funcs, &mut signatures),
                 *result,
                 "parse opcode: {}",
                 unsafe { str::from_utf8_unchecked(code) }
@@ -764,12 +771,12 @@ mod tests {
             (b"call 0", IResult::Done(&[][..], Opcode::Call(0))),
             (b"call $hello", IResult::Done(&[][..], Opcode::Call(123))),
         ];
-        let mut labels = NameMap::default();
+        let mut funcs = FunctionNameSection::default();
 
-        labels.insert(123, "hello".to_owned());
+        funcs.names_mut().insert(123, "hello".to_owned());
 
         for &(code, ref result) in tests.iter() {
-            assert_eq!(call(code, &labels), *result, "parse opcode: {}", unsafe {
+            assert_eq!(call(code, &funcs), *result, "parse opcode: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }
@@ -781,13 +788,13 @@ mod tests {
             (b"(type 123)", IResult::Done(&[][..], 123)),
             (b"(type $hello)", IResult::Done(&[][..], 123)),
         ];
-        let mut labels = NameMap::default();
+        let mut funcs = FunctionNameSection::default();
 
-        labels.insert(123, "hello".to_owned());
+        funcs.names_mut().insert(123, "hello".to_owned());
 
         for &(code, ref result) in tests.iter() {
             assert_eq!(
-                type_use(code, &labels),
+                type_use(code, &funcs),
                 *result,
                 "parse opcode: {}",
                 unsafe { str::from_utf8_unchecked(code) }
@@ -819,16 +826,16 @@ mod tests {
                 IResult::Done(&[][..], Opcode::CallIndirect(1, 0)),
             ),
         ];
-        let mut labels = NameMap::default();
-        let mut funcs = TypeSection::with_types(vec![
+        let mut funcs = FunctionNameSection::default();
+        let mut signatures = TypeSection::with_types(vec![
             Type::Function(FunctionType::new(vec![ValueType::I32], None)),
         ]);
 
-        labels.insert(123, "hello".to_owned());
+        funcs.names_mut().insert(123, "hello".to_owned());
 
         for &(code, ref result) in call_indirect_tests.iter() {
             assert_eq!(
-                call_indirect(code, &labels, &mut funcs),
+                call_indirect(code, &funcs, &mut signatures),
                 *result,
                 "parse opcode: {}",
                 unsafe { str::from_utf8_unchecked(code) }
@@ -836,7 +843,7 @@ mod tests {
         }
 
         assert_eq!(
-            funcs.types(),
+            signatures.types(),
             &[
                 Type::Function(FunctionType::new(vec![ValueType::I32], None)),
                 Type::Function(FunctionType::new(vec![ValueType::I64], None)),
@@ -849,17 +856,17 @@ mod tests {
         let tests: Vec<(&[u8], _)> = vec![
             (b"get_local 0", IResult::Done(&[][..], Opcode::GetLocal(0))),
             (
-                b"get_local $x",
+                b"get_local $l",
                 IResult::Done(&[][..], Opcode::GetLocal(123)),
             ),
             (b"set_local 0", IResult::Done(&[][..], Opcode::SetLocal(0))),
             (
-                b"set_local $x",
+                b"set_local $l",
                 IResult::Done(&[][..], Opcode::SetLocal(123)),
             ),
             (b"tee_local 0", IResult::Done(&[][..], Opcode::TeeLocal(0))),
             (
-                b"tee_local $x",
+                b"tee_local $l",
                 IResult::Done(&[][..], Opcode::TeeLocal(123)),
             ),
             (
@@ -867,7 +874,7 @@ mod tests {
                 IResult::Done(&[][..], Opcode::GetGlobal(0)),
             ),
             (
-                b"get_global $x",
+                b"get_global $g",
                 IResult::Done(&[][..], Opcode::GetGlobal(123)),
             ),
             (
@@ -875,19 +882,22 @@ mod tests {
                 IResult::Done(&[][..], Opcode::SetGlobal(0)),
             ),
             (
-                b"set_global $x",
+                b"set_global $g",
                 IResult::Done(&[][..], Opcode::SetGlobal(123)),
             ),
         ];
         let labels = NameMap::default();
-        let mut types = NameMap::default();
-        let mut funcs = TypeSection::with_types(vec![]);
+        let mut globals = NameMap::default();
+        let mut locals = NameMap::default();
+        let funcs = FunctionNameSection::default();
+        let mut signatures = TypeSection::with_types(vec![]);
 
-        types.insert(123, "x".to_owned());
+        globals.insert(123, "g".to_owned());
+        locals.insert(123, "l".to_owned());
 
         for &(code, ref result) in tests.iter() {
             assert_eq!(
-                opcode(code, &labels, &types, &mut funcs),
+                opcode(code, &labels, &globals, &locals, &funcs, &mut signatures),
                 *result,
                 "parse opcode: {}",
                 unsafe { str::from_utf8_unchecked(code) }

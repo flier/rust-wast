@@ -1,10 +1,10 @@
 use std::{i32, i64};
 use std::str::{self, FromStr};
 
-use failure::{err_msg, Error};
+use failure::Error;
 use nom::{self, ErrorKind, IResult};
 use parity_wasm::elements::{ExportEntry, External, GlobalType, ImportEntry, Internal, MemoryType,
-                            NameMap, TableType, Type, ValueType};
+                            NameMap, TableType, Type, TypeSection, ValueType};
 
 use errors::WastError;
 use func::func_type;
@@ -270,7 +270,7 @@ named!(
 );
 
 named_args!(
-    import<'a>(funcs: &'a mut Vec<Type>)<ImportEntry>,
+    import<'a>(funcs: &'a mut TypeSection)<ImportEntry>,
     map!(
         dbg_dmp!(ws!(tuple!(tag!("import"), string, string, apply!(imkind, funcs)))),
         |(_, module, field, external)| ImportEntry::new(module, field, external)
@@ -278,16 +278,16 @@ named_args!(
 );
 
 named_args!(
-    imkind<'a>(funcs: &'a mut Vec<Type>)<External>,
+    imkind<'a>(funcs: &'a mut TypeSection)<External>,
     delimited!(
         tag!("("),
         alt!(
             ws!(tuple!(tag!("func"), opt!(name), map!(map!(func_type, |ty| Type::Function(ty)), |func_type| {
-                if let Some(idx) = funcs.iter().position(|ty| { func_type == *ty }) {
+                if let Some(idx) = funcs.types().iter().position(|ty| { func_type == *ty }) {
                     idx as u32
                 } else {
-                    let idx = funcs.len();
-                    funcs.push(func_type);
+                    let idx = funcs.types().len();
+                    funcs.types_mut().push(func_type);
                     idx as u32
                 }
             }))) => { |(_, name, idx)| External::Function(idx) } |
@@ -605,10 +605,10 @@ mod tests {
             ),
         ];
 
-        let mut funcs = vec![
+        let mut funcs = TypeSection::with_types(vec![
             Type::Function(FunctionType::new(vec![ValueType::I32], None)),
             Type::Function(FunctionType::new(vec![ValueType::I64], None)),
-        ];
+        ]);
 
         for (code, (module, field, external)) in tests {
             let res = import(code, &mut funcs);

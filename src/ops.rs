@@ -4,13 +4,13 @@ use std::usize;
 use parity_wasm::elements::NameMap;
 
 use failure::Error;
-use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type};
+use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type, TypeSection};
 
 use parse::{int_type, name, value_type, var, Var, float32, float64, int32, int64, nat32};
 use func::{param, result};
 
 named_args!(
-    opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
+    opcode<'a>(labels: &'a NameMap, types: &'a NameMap, funcs: &'a mut TypeSection)<Opcode>,
     alt!(
         tag!("unreachable") => { |_| Opcode::Unreachable } |
         tag!("nop") => { |_| Opcode::Nop } |
@@ -187,18 +187,18 @@ named!(
 );
 
 named_args!(
-    call_indirect<'a>(types: &'a NameMap, funcs: &'a mut Vec<Type>)<Opcode>,
+    call_indirect<'a>(types: &'a NameMap, funcs: &'a mut TypeSection)<Opcode>,
     ws!(preceded!(tag!("call_indirect"), map!(apply!(call_instr_type, types),
         |(type_use, func_type): (Option<u32>, Option<FunctionType>)|
             if let Some(idx) = type_use {
                 Opcode::CallIndirect(idx, 0)
             } else if let Some(func_type) = func_type {
-                if let Some(idx) = funcs.iter().position(|ty| { Type::Function(func_type.clone()) == *ty }) {
+                if let Some(idx) = funcs.types().iter().position(|ty| { Type::Function(func_type.clone()) == *ty }) {
                     Opcode::CallIndirect(idx as u32, 0)
                 } else {
-                    let idx = funcs.len();
+                    let idx = funcs.types().len();
 
-                    funcs.push(Type::Function(func_type));
+                    funcs.types_mut().push(Type::Function(func_type));
 
                     Opcode::CallIndirect(idx as u32, 0)
                 }
@@ -560,7 +560,7 @@ mod tests {
         ];
         let labels = NameMap::default();
         let types = NameMap::default();
-        let mut funcs = vec![];
+        let mut funcs = TypeSection::with_types(vec![]);
 
         for &(code, ref result) in tests.iter() {
             assert_eq!(
@@ -820,9 +820,9 @@ mod tests {
             ),
         ];
         let mut labels = NameMap::default();
-        let mut funcs = vec![
+        let mut funcs = TypeSection::with_types(vec![
             Type::Function(FunctionType::new(vec![ValueType::I32], None)),
-        ];
+        ]);
 
         labels.insert(123, "hello".to_owned());
 
@@ -836,7 +836,7 @@ mod tests {
         }
 
         assert_eq!(
-            &funcs,
+            funcs.types(),
             &[
                 Type::Function(FunctionType::new(vec![ValueType::I32], None)),
                 Type::Function(FunctionType::new(vec![ValueType::I64], None)),
@@ -881,7 +881,7 @@ mod tests {
         ];
         let labels = NameMap::default();
         let mut types = NameMap::default();
-        let mut funcs = vec![];
+        let mut funcs = TypeSection::with_types(vec![]);
 
         types.insert(123, "x".to_owned());
 

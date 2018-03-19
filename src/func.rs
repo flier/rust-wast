@@ -1,4 +1,4 @@
-use parity_wasm::elements::{Func, FunctionType, NameMap, ValueType};
+use parity_wasm::elements::{FunctionType, NameMap, ValueType};
 use parity_wasm::builder::{ExportBuilder, FunctionBuilder, ImportBuilder};
 
 use parse::{string, value_type, value_type_list, var, Var};

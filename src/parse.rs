@@ -4,11 +4,46 @@ use std::str::{self, FromStr};
 use failure::Error;
 use nom::{self, IResult};
 use nom::ErrorKind::*;
-use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, GlobalType, ImportEntry,
-                            Internal, MemoryType, NameMap, TableType, Type, TypeSection, ValueType};
+use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, FunctionType, GlobalType,
+                            ImportEntry, Internal, MemoryType, NameMap, TableType, Type,
+                            TypeSection, ValueType};
 
 use errors::WastError;
 use func::func_type;
+
+pub trait FunctionTypeExt {
+    fn is_empty(&self) -> bool;
+}
+
+impl FunctionTypeExt for FunctionType {
+    fn is_empty(&self) -> bool {
+        self.params().is_empty() && self.return_type().is_none()
+    }
+}
+
+pub trait TypeSectionExt {
+    fn get(&mut self, func_type: FunctionType) -> Option<usize>;
+
+    fn get_or_insert(&mut self, func_type: FunctionType) -> usize;
+}
+
+impl TypeSectionExt for TypeSection {
+    fn get(&mut self, func_type: FunctionType) -> Option<usize> {
+        self.types()
+            .iter()
+            .position(|ty| Type::Function(func_type.clone()) == *ty)
+    }
+
+    fn get_or_insert(&mut self, func_type: FunctionType) -> usize {
+        self.get(func_type.clone()).unwrap_or_else(|| {
+            let idx = self.types().len();
+
+            self.types_mut().push(Type::Function(func_type));
+
+            idx
+        })
+    }
+}
 
 /// num:    <digit> (_? <digit>)*
 named!(
@@ -317,18 +352,18 @@ named_args!(
     delimited!(
         tag!("("),
         alt!(
-            ws!(tuple!(tag!("func"), opt!(name), map!(map!(func_type, |ty| Type::Function(ty)), |func_type| {
-                if let Some(idx) = funcs.types().iter().position(|ty| { func_type == *ty }) {
-                    idx as u32
-                } else {
-                    let idx = funcs.types().len();
-                    funcs.types_mut().push(func_type);
-                    idx as u32
-                }
-            }))) => { |(_, name, idx)| External::Function(idx) } |
-            ws!(tuple!(tag!("global"), opt!(name), global_type)) => { |(_, name, ty)| External::Global(ty) } |
-            ws!(tuple!(tag!("table"), opt!(name), table_type)) => { |(_, name, ty)| External::Table(ty) } |
-            ws!(tuple!(tag!("memory"), opt!(name), memory_type)) => { |(_, name, ty)| External::Memory(ty) }
+            ws!(tuple!(tag!("func"), opt!(name), func_type)) => {
+                |(_, name, ty)| External::Function(funcs.get_or_insert(ty) as u32)
+            } |
+            ws!(tuple!(tag!("global"), opt!(name), global_type)) => {
+                |(_, name, ty)| External::Global(ty)
+            } |
+            ws!(tuple!(tag!("table"), opt!(name), table_type)) => {
+                |(_, name, ty)| External::Table(ty)
+            } |
+            ws!(tuple!(tag!("memory"), opt!(name), memory_type)) => {
+                |(_, name, ty)| External::Memory(ty)
+            }
         ),
         tag!(")")
     )

@@ -2,7 +2,7 @@ use itertools;
 use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, NameMap, Opcode, Type,
                             TypeSection, ValueType};
 
-use parse::{value_type, var, Value, Var};
+use parse::{value_type, var, FunctionTypeExt, TypeSectionExt, Value, Var};
 use func::func_type;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -126,47 +126,13 @@ named_args!(
                         Ok(Instr::CallIndirect(var))
                     },
                     None => {
-                        Ok(Instr::CallIndirect(Var::Index(ctxt.types.find_or_insert(func_type) as u32)))
+                        Ok(Instr::CallIndirect(Var::Index(ctxt.types.get_or_insert(func_type) as u32)))
                     }
                 }
             }
         )
     )
 );
-
-pub trait FunctionTypeExt {
-    fn is_empty(&self) -> bool;
-}
-
-impl FunctionTypeExt for FunctionType {
-    fn is_empty(&self) -> bool {
-        self.params().is_empty() && self.return_type().is_none()
-    }
-}
-
-pub trait TypeSectionExt {
-    fn find(&mut self, func_type: FunctionType) -> Option<usize>;
-
-    fn find_or_insert(&mut self, func_type: FunctionType) -> usize;
-}
-
-impl TypeSectionExt for TypeSection {
-    fn find(&mut self, func_type: FunctionType) -> Option<usize> {
-        self.types()
-            .iter()
-            .position(|ty| Type::Function(func_type.clone()) == *ty)
-    }
-
-    fn find_or_insert(&mut self, func_type: FunctionType) -> usize {
-        self.find(func_type.clone()).unwrap_or_else(|| {
-            let idx = self.types().len();
-
-            self.types_mut().push(Type::Function(func_type));
-
-            idx
-        })
-    }
-}
 
 named!(
     type_use<Var>,

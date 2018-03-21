@@ -3,7 +3,7 @@ use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, NameMa
                             TypeSection, ValueType};
 
 use parse::{value_type, var, FunctionTypeExt, TypeSectionExt, Var, float32, float64, int32, int64};
-use ops::{binary, compare, convert, load, store, test, unary};
+use ops::{align, binary, compare, convert, mem_size, offset, sign, test, unary};
 use func::func_type;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,9 +45,9 @@ pub enum Instr {
     /// write global variable
     SetGlobal(Var),
     /// read memory at address
-    Load(Opcode),
+    Load(Load),
     /// write memory at address
-    Store(Opcode),
+    Store(Store),
     /// size of linear memory
     CurrentMemory,
     /// grow linear memory
@@ -97,6 +97,169 @@ impl From<Constant> for Instr {
         Instr::Const(constant)
     }
 }
+
+impl From<Constant> for Opcode {
+    fn from(constant: Constant) -> Self {
+        match constant {
+            Constant::I32(v) => Opcode::I32Const(v),
+            Constant::I64(v) => Opcode::I64Const(v),
+            Constant::F32(v) => Opcode::F32Const(v as u32),
+            Constant::F64(v) => Opcode::F64Const(v as u64),
+        }
+    }
+}
+
+/// <val_type>.const <value>
+named!(
+    constant<Constant>,
+    ws!(switch!(recognize!(pair!(value_type, tag!(".const"))),
+            b"i32.const" => map!(int32, |n| Constant::I32(n)) |
+            b"i64.const" => map!(int64, |n| Constant::I64(n)) |
+            b"f32.const" => map!(float32, |v| Constant::F32(v)) |
+            b"f64.const" => map!(float64, |v| Constant::F64(v))
+        ))
+);
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Load {
+    I32(u32, u32),
+    I64(u32, u32),
+    F32(u32, u32),
+    F64(u32, u32),
+    I8AsI32(u32, u32),
+    U8AsI32(u32, u32),
+    I16AsI32(u32, u32),
+    U16AsI32(u32, u32),
+    I8AsI64(u32, u32),
+    U8AsI64(u32, u32),
+    I16AsI64(u32, u32),
+    U16AsI64(u32, u32),
+    I32AsI64(u32, u32),
+    U32AsI64(u32, u32),
+}
+
+impl From<Load> for Instr {
+    fn from(load: Load) -> Self {
+        Instr::Load(load)
+    }
+}
+
+impl From<Load> for Opcode {
+    fn from(load: Load) -> Self {
+        match load {
+            Load::I32(flags, offset) => Opcode::I32Load(flags, offset),
+            Load::I64(flags, offset) => Opcode::I64Load(flags, offset),
+            Load::F32(flags, offset) => Opcode::F32Load(flags, offset),
+            Load::F64(flags, offset) => Opcode::F64Load(flags, offset),
+            Load::I8AsI32(flags, offset) => Opcode::I32Load8S(flags, offset),
+            Load::U8AsI32(flags, offset) => Opcode::I32Load8U(flags, offset),
+            Load::I16AsI32(flags, offset) => Opcode::I32Load16S(flags, offset),
+            Load::U16AsI32(flags, offset) => Opcode::I32Load16U(flags, offset),
+            Load::I8AsI64(flags, offset) => Opcode::I64Load8S(flags, offset),
+            Load::U8AsI64(flags, offset) => Opcode::I64Load8U(flags, offset),
+            Load::I16AsI64(flags, offset) => Opcode::I64Load16S(flags, offset),
+            Load::U16AsI64(flags, offset) => Opcode::I64Load16U(flags, offset),
+            Load::I32AsI64(flags, offset) => Opcode::I64Load32S(flags, offset),
+            Load::U32AsI64(flags, offset) => Opcode::I64Load32U(flags, offset),
+        }
+    }
+}
+
+/// <val_type>.load((8|16|32)_<sign>)? <offset>? <align>?
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    load<Load>,
+    ws!(do_parse!(
+        op: recognize!(tuple!(value_type, tag!(".load"), opt!(complete!(tuple!(mem_size, tag!("_"), sign))))) >>
+        offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
+        align: verify!(
+            map!(opt!(complete!(align)), |n| n.unwrap_or_default()),
+            |n: u32| n == 0 || n.is_power_of_two()
+        ) >>
+        opcode: switch!(value!(op),
+            b"i32.load" => value!(Load::I32(align, offset)) |
+            b"i64.load" => value!(Load::I64(align, offset)) |
+            b"f32.load" => value!(Load::F32(align, offset)) |
+            b"f64.load" => value!(Load::F64(align, offset)) |
+            b"i32.load8_s" => value!(Load::I8AsI32(align, offset)) |
+            b"i32.load8_u" => value!(Load::U8AsI32(align, offset)) |
+            b"i32.load16_s" => value!(Load::I16AsI32(align, offset)) |
+            b"i32.load16_u" => value!(Load::U16AsI32(align, offset)) |
+            b"i64.load8_s" => value!(Load::I8AsI64(align, offset)) |
+            b"i64.load8_u" => value!(Load::U8AsI64(align, offset)) |
+            b"i64.load16_s" => value!(Load::I16AsI64(align, offset)) |
+            b"i64.load16_u" => value!(Load::U16AsI64(align, offset)) |
+            b"i64.load32_s" => value!(Load::I32AsI64(align, offset)) |
+            b"i64.load32_u" => value!(Load::U32AsI64(align, offset))
+        ) >>
+        ( opcode )
+    ))
+);
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Store {
+    I32(u32, u32),
+    I64(u32, u32),
+    F32(u32, u32),
+    F64(u32, u32),
+    I32AsI8(u32, u32),
+    I32AsI16(u32, u32),
+    I64AsI8(u32, u32),
+    I64AsI16(u32, u32),
+    I64AsI32(u32, u32),
+}
+
+impl From<Store> for Instr {
+    fn from(store: Store) -> Self {
+        Instr::Store(store)
+    }
+}
+
+impl From<Store> for Opcode {
+    fn from(store: Store) -> Self {
+        match store {
+            Store::I32(flags, offset) => Opcode::I32Store(flags, offset),
+            Store::I64(flags, offset) => Opcode::I64Store(flags, offset),
+            Store::F32(flags, offset) => Opcode::F32Store(flags, offset),
+            Store::F64(flags, offset) => Opcode::F64Store(flags, offset),
+            Store::I32AsI8(flags, offset) => Opcode::I32Store8(flags, offset),
+            Store::I32AsI16(flags, offset) => Opcode::I32Store16(flags, offset),
+            Store::I64AsI8(flags, offset) => Opcode::I64Store8(flags, offset),
+            Store::I64AsI16(flags, offset) => Opcode::I64Store16(flags, offset),
+            Store::I64AsI32(flags, offset) => Opcode::I64Store32(flags, offset),
+        }
+    }
+}
+
+/// <val_type>.store(8|16|32)? <offset>? <align>?
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    pub store<Store>,
+    ws!(do_parse!(
+        op: recognize!(tuple!(
+                value_type,
+                tag!(".store"),
+                opt!(complete!(mem_size))
+            )) >>
+        offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
+        align: verify!(
+            map!(opt!(complete!(align)), |n| n.unwrap_or_default()),
+            |n: u32| n == 0 || n.is_power_of_two()
+        ) >>
+        opcode: switch!(value!(op),
+            b"i32.store" => value!(Store::I32(align, offset)) |
+            b"i64.store" => value!(Store::I64(align, offset)) |
+            b"f32.store" => value!(Store::F32(align, offset)) |
+            b"f64.store" => value!(Store::F64(align, offset)) |
+            b"i32.store8" => value!(Store::I32AsI8(align, offset)) |
+            b"i32.store16" => value!(Store::I32AsI16(align, offset)) |
+            b"i64.store8" => value!(Store::I64AsI8(align, offset)) |
+            b"i64.store16" => value!(Store::I64AsI16(align, offset)) |
+            b"i64.store32" => value!(Store::I64AsI32(align, offset))
+        ) >>
+        ( opcode )
+    ))
+);
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
@@ -159,17 +322,6 @@ named!(
             convert => { |convert| Instr::Convert(convert) }
         )
     )
-);
-
-/// <val_type>.const <value>
-named!(
-    constant<Constant>,
-    ws!(switch!(recognize!(pair!(value_type, tag!(".const"))),
-            b"i32.const" => map!(int32, |n| Constant::I32(n)) |
-            b"i64.const" => map!(int64, |n| Constant::I64(n)) |
-            b"f32.const" => map!(float32, |v| Constant::F32(v)) |
-            b"f64.const" => map!(float64, |v| Constant::F64(v))
-        ))
 );
 
 named_args!(

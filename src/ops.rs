@@ -326,7 +326,7 @@ named!(
 );
 
 named!(
-    mem_size<usize>,
+    pub mem_size<usize>,
     map_res!(
         map_res!(alt!(tag!("8") | tag!("16") | tag!("32")), str::from_utf8),
         usize::from_str
@@ -334,17 +334,17 @@ named!(
 );
 
 /// sign:  s|u
-named!(sign, alt!(tag!("s") | tag!("u")));
+named!(pub sign, alt!(tag!("s") | tag!("u")));
 
 /// offset: offset=<nat>
 named!(
-    offset<u32>,
+    pub offset<u32>,
     map!(preceded!(tag!("offset="), nat32), |n| n as u32)
 );
 
 /// align: align=(1|2|4|8|...)
 named!(
-    align<u32>,
+    pub align<u32>,
     map!(preceded!(tag!("align="), nat32), |n| n as u32)
 );
 

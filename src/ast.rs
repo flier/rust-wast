@@ -292,6 +292,7 @@ mod tests {
 
     use pretty_env_logger;
     use nom::IResult::*;
+    use parity_wasm::elements::ValueType::*;
 
     use super::*;
     use super::Instr::*;
@@ -394,10 +395,7 @@ mod tests {
 
         ctxt.types
             .types_mut()
-            .push(Type::Function(FunctionType::new(
-                vec![ValueType::I32],
-                None,
-            )));
+            .push(Type::Function(FunctionType::new(vec![I32], None)));
 
         for &(code, ref result) in tests.iter() {
             assert_eq!(
@@ -411,12 +409,9 @@ mod tests {
         assert_eq!(
             ctxt.types.types(),
             &[
-                Type::Function(FunctionType::new(vec![ValueType::I32], None)),
-                Type::Function(FunctionType::new(vec![ValueType::I64], None)),
-                Type::Function(FunctionType::new(
-                    vec![ValueType::I32, ValueType::I64],
-                    Some(ValueType::F32)
-                )),
+                Type::Function(FunctionType::new(vec![I32], None)),
+                Type::Function(FunctionType::new(vec![I64], None)),
+                Type::Function(FunctionType::new(vec![I32, I64], Some(F32))),
             ]
         );
     }
@@ -430,7 +425,7 @@ mod tests {
             ),
             (
                 b"block (result i32)\nend",
-                Done(&[][..], Block(BlockType::Value(ValueType::I32), vec![])),
+                Done(&[][..], Block(BlockType::Value(I32), vec![])),
             ),
             (
                 b"block $done\nend $done",
@@ -438,39 +433,28 @@ mod tests {
             ),
             (
                 b"block $done (result i32)\nend $done",
-                Done(&[][..], Block(BlockType::Value(ValueType::I32), vec![])),
+                Done(&[][..], Block(BlockType::Value(I32), vec![])),
             ),
             (
                 b"block $done (result i32) nop\nend $done",
-                Done(&[][..], Block(BlockType::Value(ValueType::I32), vec![Nop])),
+                Done(&[][..], Block(BlockType::Value(I32), vec![Nop])),
             ),
             (
                 b"loop $done (result i32) unreachable\nend $done",
-                Done(
-                    &[][..],
-                    Loop(BlockType::Value(ValueType::I32), vec![Unreachable]),
-                ),
+                Done(&[][..], Loop(BlockType::Value(I32), vec![Unreachable])),
             ),
             (
                 b"if $done (result i32) nop unreachable\nend $done",
                 Done(
                     &[][..],
-                    If(
-                        BlockType::Value(ValueType::I32),
-                        vec![Nop, Unreachable],
-                        vec![],
-                    ),
+                    If(BlockType::Value(I32), vec![Nop, Unreachable], vec![]),
                 ),
             ),
             (
                 b"if $done (result i32) nop\nelse unreachable\nend $done",
                 Done(
                     &[][..],
-                    If(
-                        BlockType::Value(ValueType::I32),
-                        vec![Nop],
-                        vec![Unreachable],
-                    ),
+                    If(BlockType::Value(I32), vec![Nop], vec![Unreachable]),
                 ),
             ),
         ];
@@ -490,6 +474,75 @@ mod tests {
     #[test]
     fn parse_expr() {
         let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"(block)",
+                Done(&[][..], vec![Block(BlockType::NoResult, vec![])]),
+            ),
+            (
+                b"(block $l)",
+                Done(&[][..], vec![Block(BlockType::NoResult, vec![])]),
+            ),
+            (
+                b"(block (nop))",
+                Done(&[][..], vec![Block(BlockType::NoResult, vec![Nop])]),
+            ),
+            (
+                b"(block (result i32) (i32.const 7))",
+                Done(
+                    &[][..],
+                    vec![
+                        Block(BlockType::Value(I32), vec![Const(Opcode::I32Const(7))]),
+                    ],
+                ),
+            ),
+            (
+                b"(block (call $dummy) (call $dummy) (call $dummy) (call $dummy))",
+                Done(
+                    &[][..],
+                    vec![
+                        Block(
+                            BlockType::NoResult,
+                            vec![
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                            ],
+                        ),
+                    ],
+                ),
+            ),
+            (
+                b"(block (result i32)
+                    (block (call $dummy) (block) (nop))
+                    (block (result i32) (call $dummy) (i32.const 9))
+                )",
+                Done(
+                    &[][..],
+                    vec![
+                        Block(
+                            BlockType::Value(I32),
+                            vec![
+                                Block(
+                                    BlockType::NoResult,
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Block(BlockType::NoResult, vec![]),
+                                        Nop,
+                                    ],
+                                ),
+                                Block(
+                                    BlockType::Value(I32),
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Const(Opcode::I32Const(9)),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ),
             (
                 b"(if (get_local 0) (then))",
                 Done(
@@ -556,7 +609,7 @@ mod tests {
                     &[][..],
                     vec![
                         GetLocal(Var::Index(0)),
-                        If(BlockType::Value(ValueType::I32), vec![Nop], vec![Nop]),
+                        If(BlockType::Value(I32), vec![Nop], vec![Nop]),
                     ],
                 ),
             ),
@@ -606,7 +659,7 @@ mod tests {
                     vec![
                         GetLocal(Var::Index(0)),
                         If(
-                            BlockType::Value(ValueType::I32),
+                            BlockType::Value(I32),
                             vec![
                                 Call(Var::Name("dummy".to_owned())),
                                 Call(Var::Name("dummy".to_owned())),
@@ -645,7 +698,7 @@ mod tests {
                     vec![
                         GetLocal(Var::Index(0)),
                         If(
-                            BlockType::Value(ValueType::I32),
+                            BlockType::Value(I32),
                             vec![
                                 GetLocal(Var::Index(1)),
                                 If(
@@ -669,7 +722,7 @@ mod tests {
                                 ),
                                 GetLocal(Var::Index(1)),
                                 If(
-                                    BlockType::Value(ValueType::I32),
+                                    BlockType::Value(I32),
                                     vec![
                                         Call(Var::Name("dummy".to_owned())),
                                         Const(Opcode::I32Const(9)),
@@ -703,7 +756,7 @@ mod tests {
                                 ),
                                 GetLocal(Var::Index(1)),
                                 If(
-                                    BlockType::Value(ValueType::I32),
+                                    BlockType::Value(I32),
                                     vec![
                                         Call(Var::Name("dummy".to_owned())),
                                         Const(Opcode::I32Const(10)),

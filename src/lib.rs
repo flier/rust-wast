@@ -3,6 +3,7 @@
 
 #[macro_use]
 extern crate failure;
+extern crate itertools;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -17,6 +18,7 @@ extern crate pretty_env_logger;
 
 #[macro_use]
 mod errors;
+mod ast;
 #[macro_use]
 mod parse;
 mod ops;

@@ -26,6 +26,11 @@ pub enum Parsing {
     Var,
     Comment,
     Block,
+    Instr,
+    PlainInstr,
+    BlockInstr,
+    Expr,
+    IfBlock,
 }
 
 impl From<Parsing> for ErrorKind {
@@ -52,6 +57,11 @@ lazy_static!{
         values.insert(Parsing::Var as u32, "var");
         values.insert(Parsing::Comment as u32, "comment");
         values.insert(Parsing::Block as u32, "block");
+        values.insert(Parsing::Instr as u32, "instr");
+        values.insert(Parsing::PlainInstr as u32, "plain_instr");
+        values.insert(Parsing::BlockInstr as u32, "block_instr");
+        values.insert(Parsing::Expr as u32, "expr");
+        values.insert(Parsing::IfBlock as u32, "if_block");
 
         values
     };

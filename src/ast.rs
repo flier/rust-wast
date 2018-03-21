@@ -83,19 +83,40 @@ named_args!(
 
 named_args!(
     instr<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
-    ws!(alt!(
-        plain_instr => { |instr| vec![instr] } |
-        apply!(call_instr, ctxt) => { |instr| vec![instr] } |
-        apply!(block_instr, ctxt) => { |instr| vec![instr] } |
-        apply!(expr, ctxt)
-    ))
+    parsing!(Instr,
+        ws!(alt!(
+            plain_instr => { |instr| vec![instr] } |
+            apply!(call_instr, ctxt) => { |instr| vec![instr] } |
+            apply!(block_instr, ctxt) => { |instr| vec![instr] } |
+            apply!(expr, ctxt)
+        ))
+    )
 );
 
 named!(
     plain_instr<Instr>,
-    alt_complete!(
-        tag!("unreachable") => { |_| Instr::Unreachable } |
-        tag!("nop") => { |_| Instr::Nop }
+    parsing!(
+        PlainInstr,
+        alt_complete!(
+            tag!("unreachable") => { |_| Instr::Unreachable } |
+            tag!("nop") => { |_| Instr::Nop } |
+            ws!(preceded!(tag!("br"), var)) => { |var| Instr::Br(var) } |
+            ws!(preceded!(tag!("br_if"), var)) => { |var| Instr::BrIf(var) } |
+            ws!(preceded!(tag!("br_table"), pair!(var, many0!(var)))) => {
+                |(default, targets)| Instr::BrTable(targets, default)
+            } |
+            tag!("return") => { |_| Instr::Return } |
+            ws!(preceded!(tag!("call"), var)) => { |var| Instr::Call(var) } |
+            tag!("drop") => { |_| Instr::Drop } |
+            tag!("select") => { |_| Instr::Select } |
+            ws!(preceded!(tag!("get_local"), var)) => { |var| Instr::GetLocal(var) } |
+            ws!(preceded!(tag!("set_local"), var)) => { |var| Instr::SetLocal(var) } |
+            ws!(preceded!(tag!("tee_local"), var)) => { |var| Instr::TeeLocal(var) } |
+            ws!(preceded!(tag!("get_global"), var)) => { |var| Instr::GetGlobal(var) } |
+            ws!(preceded!(tag!("set_global"), var)) => { |var| Instr::SetGlobal(var) } |
+            tag!("current_memory") => { |_| Instr::CurrentMemory } |
+            tag!("grow_memory") => { |_| Instr::GrowMemory }
+        )
     )
 );
 
@@ -147,20 +168,22 @@ named!(
 
 named_args!(
     block_instr<'a>(ctxt: &'a mut Context)<Instr>,
-    ws!(alt_complete!(
-        tuple!(tag!("block"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
-            |(_, _, (block_type, instrs), _, _)| Instr::Block(block_type, instrs)
-        } |
-        tuple!(tag!("loop"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
-            |(_, _, (block_type, instrs), _, _)| Instr::Loop(block_type, instrs)
-        } |
-        tuple!(tag!("if"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
-            |(_, _, (block_type, then), _, _)| Instr::If(block_type, then, vec![])
-        } |
-        tuple!(tag!("if"), opt!(var), apply!(block, ctxt), tag!("else"), opt!(var), apply!(instr_list, ctxt), tag!("end"), opt!(var)) => {
-            |(_, _, (block_type, then), _, _, else_, _, _)| Instr::If(block_type, then, else_)
-        }
-    ))
+    parsing!(BlockInstr,
+        ws!(alt_complete!(
+            tuple!(tag!("block"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
+                |(_, _, (block_type, instrs), _, _)| Instr::Block(block_type, instrs)
+            } |
+            tuple!(tag!("loop"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
+                |(_, _, (block_type, instrs), _, _)| Instr::Loop(block_type, instrs)
+            } |
+            tuple!(tag!("if"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
+                |(_, _, (block_type, then), _, _)| Instr::If(block_type, then, vec![])
+            } |
+            tuple!(tag!("if"), opt!(var), apply!(block, ctxt), tag!("else"), opt!(var), apply!(instr_list, ctxt), tag!("end"), opt!(var)) => {
+                |(_, _, (block_type, then), _, _, else_, _, _)| Instr::If(block_type, then, else_)
+            }
+        ))
+    )
 );
 
 named_args!(
@@ -190,45 +213,49 @@ named_args!(expr_list<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
 );
 
 named_args!(expr<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
-    ws!(delimited!(
-        tag!("("),
-        alt!(
-            plain_instr => {
-                |instr| vec![instr]
-            } |
-            apply!(call_instr, ctxt) => {
-                |instr| vec![instr]
-            } |
-            tuple!(tag!("block"), opt!(var), apply!(block, ctxt)) => {
-                |(_, label, (block_type, instrs))| vec![Instr::Block(block_type, instrs)]
-            } |
-            tuple!(tag!("loop"), opt!(var), apply!(block, ctxt)) => {
-                |(_, label, (block_type, instrs))| vec![Instr::Loop(block_type, instrs)]
-            } |
-            tuple!(tag!("if"), opt!(var), apply!(if_block, ctxt)) => {
-                |(_, label, (mut cond, block_type, then, else_))| {
-                    let mut instrs = vec![];
+    parsing!(Expr,
+        ws!(delimited!(
+            tag!("("),
+            alt!(
+                plain_instr => {
+                    |instr| vec![instr]
+                } |
+                apply!(call_instr, ctxt) => {
+                    |instr| vec![instr]
+                } |
+                tuple!(tag!("block"), opt!(var), apply!(block, ctxt)) => {
+                    |(_, label, (block_type, instrs))| vec![Instr::Block(block_type, instrs)]
+                } |
+                tuple!(tag!("loop"), opt!(var), apply!(block, ctxt)) => {
+                    |(_, label, (block_type, instrs))| vec![Instr::Loop(block_type, instrs)]
+                } |
+                tuple!(tag!("if"), opt!(var), apply!(if_block, ctxt)) => {
+                    |(_, label, (mut cond, block_type, then, else_))| {
+                        let mut instrs = vec![];
 
-                    instrs.append(&mut cond);
-                    instrs.push(Instr::If(block_type, then, else_));
+                        instrs.append(&mut cond);
+                        instrs.push(Instr::If(block_type, then, else_));
 
-                    instrs
+                        instrs
+                    }
                 }
-            }
-        ),
-        tag!(")")
-    ))
+            ),
+            tag!(")")
+        ))
+    )
 );
 
 named_args!(
     if_block<'a>(ctxt: &'a mut Context)<(Vec<Instr>, BlockType, Vec<Instr>, Vec<Instr>)>,
-    map!(
-        pair!(opt!(block_type), apply!(if_, ctxt)),
-        |(block_type, (cond, then, else_))| (
-            cond,
-            block_type.map_or(BlockType::NoResult, BlockType::Value),
-            then,
-            else_.unwrap_or_default()
+    parsing!(IfBlock,
+        map!(
+            pair!(opt!(block_type), apply!(if_, ctxt)),
+            |(block_type, (cond, then, else_))| (
+                cond,
+                block_type.map_or(BlockType::NoResult, BlockType::Value),
+                then,
+                else_.unwrap_or_default()
+            )
         )
     )
 );
@@ -258,6 +285,92 @@ mod tests {
     use nom::IResult::*;
 
     use super::*;
+
+    #[test]
+    fn parse_plain_instr() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"unreachable", Done(&[][..], Instr::Unreachable)),
+            (b"nop", Done(&[][..], Instr::Nop)),
+            (b"br 123", Done(&[][..], Instr::Br(Var::Index(123)))),
+            (
+                b"br $end",
+                Done(&[][..], Instr::Br(Var::Name("end".to_owned()))),
+            ),
+            (b"br_if 123", Done(&[][..], Instr::BrIf(Var::Index(123)))),
+            (
+                b"br_if $end",
+                Done(&[][..], Instr::BrIf(Var::Name("end".to_owned()))),
+            ),
+            (
+                b"br_table 0",
+                Done(&[][..], Instr::BrTable(vec![], Var::Index(0))),
+            ),
+            (
+                b"br_table 0 1 2 3",
+                Done(
+                    &[][..],
+                    Instr::BrTable(
+                        vec![Var::Index(1), Var::Index(2), Var::Index(3)],
+                        Var::Index(0),
+                    ),
+                ),
+            ),
+            (b"return", Done(&[][..], Instr::Return)),
+            (b"call 123", Done(&[][..], Instr::Call(Var::Index(123)))),
+            (
+                b"call $name",
+                Done(&[][..], Instr::Call(Var::Name("name".to_owned()))),
+            ),
+            (
+                b"get_local 123",
+                Done(&[][..], Instr::GetLocal(Var::Index(123))),
+            ),
+            (
+                b"get_local $name",
+                Done(&[][..], Instr::GetLocal(Var::Name("name".to_owned()))),
+            ),
+            (
+                b"set_local 123",
+                Done(&[][..], Instr::SetLocal(Var::Index(123))),
+            ),
+            (
+                b"set_local $name",
+                Done(&[][..], Instr::SetLocal(Var::Name("name".to_owned()))),
+            ),
+            (
+                b"tee_local 123",
+                Done(&[][..], Instr::TeeLocal(Var::Index(123))),
+            ),
+            (
+                b"tee_local $name",
+                Done(&[][..], Instr::TeeLocal(Var::Name("name".to_owned()))),
+            ),
+            (
+                b"get_global 123",
+                Done(&[][..], Instr::GetGlobal(Var::Index(123))),
+            ),
+            (
+                b"get_global $name",
+                Done(&[][..], Instr::GetGlobal(Var::Name("name".to_owned()))),
+            ),
+            (
+                b"set_global 123",
+                Done(&[][..], Instr::SetGlobal(Var::Index(123))),
+            ),
+            (
+                b"set_global $name",
+                Done(&[][..], Instr::SetGlobal(Var::Name("name".to_owned()))),
+            ),
+            (b"current_memory", Done(&[][..], Instr::CurrentMemory)),
+            (b"grow_memory", Done(&[][..], Instr::GrowMemory)),
+        ];
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(plain_instr(code), *result, "parse instr: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
 
     #[test]
     fn parse_call_instr() {
@@ -391,6 +504,155 @@ mod tests {
                 "parse instr: {}",
                 unsafe { str::from_utf8_unchecked(code) }
             );
+        }
+    }
+
+    #[test]
+    fn parse_expr() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"(if (get_local 0) (then))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(BlockType::NoResult, vec![], vec![]),
+                    ],
+                ),
+            ),
+            (
+                b"(if (get_local 0) (then) (else))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(BlockType::NoResult, vec![], vec![]),
+                    ],
+                ),
+            ),
+            (
+                b"(if $l (get_local 0) (then))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(BlockType::NoResult, vec![], vec![]),
+                    ],
+                ),
+            ),
+            (
+                b"(if $l (get_local 0) (then) (else))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(BlockType::NoResult, vec![], vec![]),
+                    ],
+                ),
+            ),
+            (
+                b"(if (get_local 0) (then (nop)))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(BlockType::NoResult, vec![Instr::Nop], vec![]),
+                    ],
+                ),
+            ),
+            (
+                b"(if (get_local 0) (then (nop)) (else (nop)))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(BlockType::NoResult, vec![Instr::Nop], vec![Instr::Nop]),
+                    ],
+                ),
+            ),
+            (
+                b"(if (result i32) (get_local 0) (then (nop)) (else (nop)))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(
+                            BlockType::Value(ValueType::I32),
+                            vec![Instr::Nop],
+                            vec![Instr::Nop],
+                        ),
+                    ],
+                ),
+            ),
+            (
+                b"(if (get_local 0) (then (call $dummy) (call $dummy) (call $dummy)))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(
+                            BlockType::NoResult,
+                            vec![
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                            ],
+                            vec![],
+                        ),
+                    ],
+                ),
+            ),
+            (
+                b"(if (get_local 0) (then) (else (call $dummy) (call $dummy) (call $dummy)))",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(
+                            BlockType::NoResult,
+                            vec![],
+                            vec![
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                            ],
+                        ),
+                    ],
+                ),
+            ),
+            (
+                b"(if (result i32) (get_local 0)
+                    (then (call $dummy) (call $dummy) (call $dummy))
+                    (else (call $dummy) (call $dummy) (call $dummy))
+                )",
+                Done(
+                    &[][..],
+                    vec![
+                        Instr::GetLocal(Var::Index(0)),
+                        Instr::If(
+                            BlockType::Value(ValueType::I32),
+                            vec![
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                            ],
+                            vec![
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Instr::Call(Var::Name("dummy".to_owned())),
+                            ],
+                        ),
+                    ],
+                ),
+            ),
+        ];
+
+        let mut ctxt = Context::default();
+
+        for &(code, ref result) in tests.iter() {
+            assert_eq!(expr(code, &mut ctxt), *result, "parse expr: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
         }
     }
 }

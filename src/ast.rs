@@ -1,8 +1,8 @@
 use itertools;
-use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, NameMap, Opcode, Type,
-                            TypeSection, ValueType};
+use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type, ValueType};
 
-use parse::{value_type, var, FunctionTypeExt, TypeSectionExt, Var, float32, float64, int32, int64};
+use parse::{value_type, var, Context, FunctionTypeExt, TypeSectionExt, Var, float32, float64,
+            int32, int64};
 use ops::{align, binary, compare, convert, mem_size, offset, sign, test, unary};
 use func::func_type;
 
@@ -260,17 +260,6 @@ named!(
         ( opcode )
     ))
 );
-
-#[derive(Clone, Debug, Default)]
-pub struct Context {
-    pub types: TypeSection,
-    pub tables: NameMap,
-    pub memories: NameMap,
-    pub funcs: FunctionNameSection,
-    pub locals: NameMap,
-    pub globals: NameMap,
-    pub labels: NameMap,
-}
 
 named_args!(
     instr_list<'a>(ctxt: &'a mut Context)<Vec<Instr>>,

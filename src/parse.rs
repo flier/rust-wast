@@ -11,6 +11,17 @@ use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, Function
 use errors::WastError;
 use func::func_type;
 
+#[derive(Clone, Debug, Default)]
+pub struct Context {
+    pub types: TypeSection,
+    pub tables: NameMap,
+    pub memories: NameMap,
+    pub funcs: FunctionNameSection,
+    pub locals: NameMap,
+    pub globals: NameMap,
+    pub labels: NameMap,
+}
+
 pub trait FunctionTypeExt {
     fn is_empty(&self) -> bool;
 }

@@ -2,8 +2,8 @@ use itertools;
 use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, NameMap, Opcode, Type,
                             TypeSection, ValueType};
 
-use parse::{value_type, var, FunctionTypeExt, TypeSectionExt, Var};
-use ops::{binary, compare, constant, convert, load, store, test, unary};
+use parse::{value_type, var, FunctionTypeExt, TypeSectionExt, Var, float32, float64, int32, int64};
+use ops::{binary, compare, convert, load, store, test, unary};
 use func::func_type;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -53,7 +53,7 @@ pub enum Instr {
     /// grow linear memory
     GrowMemory,
     /// constant
-    Const(Opcode),
+    Const(Constant),
     /// numeric test
     Test(Opcode),
     /// numeric comparison
@@ -64,6 +64,38 @@ pub enum Instr {
     Binary(Opcode),
     /// conversion
     Convert(Opcode),
+}
+
+impl Instr {
+    pub fn i32(v: i32) -> Self {
+        Instr::Const(Constant::I32(v))
+    }
+
+    pub fn i64(v: i64) -> Self {
+        Instr::Const(Constant::I64(v))
+    }
+
+    pub fn f32(v: f32) -> Self {
+        Instr::Const(Constant::F32(v))
+    }
+
+    pub fn f64(v: f64) -> Self {
+        Instr::Const(Constant::F64(v))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Constant {
+    I32(i32),
+    I64(i64),
+    F32(f32),
+    F64(f64),
+}
+
+impl From<Constant> for Instr {
+    fn from(constant: Constant) -> Self {
+        Instr::Const(constant)
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -127,6 +159,17 @@ named!(
             convert => { |convert| Instr::Convert(convert) }
         )
     )
+);
+
+/// <val_type>.const <value>
+named!(
+    constant<Constant>,
+    ws!(switch!(recognize!(pair!(value_type, tag!(".const"))),
+            b"i32.const" => map!(int32, |n| Constant::I32(n)) |
+            b"i64.const" => map!(int64, |n| Constant::I64(n)) |
+            b"f32.const" => map!(float32, |v| Constant::F32(v)) |
+            b"f64.const" => map!(float64, |v| Constant::F64(v))
+        ))
 );
 
 named_args!(
@@ -490,9 +533,7 @@ mod tests {
                 b"(block (result i32) (i32.const 7))",
                 Done(
                     &[][..],
-                    vec![
-                        Block(BlockType::Value(I32), vec![Const(Opcode::I32Const(7))]),
-                    ],
+                    vec![Block(BlockType::Value(I32), vec![Instr::i32(7)])],
                 ),
             ),
             (
@@ -535,7 +576,7 @@ mod tests {
                                     BlockType::Value(I32),
                                     vec![
                                         Call(Var::Name("dummy".to_owned())),
-                                        Const(Opcode::I32Const(9)),
+                                        Const(Constant::I32(9)),
                                     ],
                                 ),
                             ],
@@ -663,12 +704,12 @@ mod tests {
                             vec![
                                 Call(Var::Name("dummy".to_owned())),
                                 Call(Var::Name("dummy".to_owned())),
-                                Const(Opcode::I32Const(8)),
+                                Instr::i32(8),
                             ],
                             vec![
                                 Call(Var::Name("dummy".to_owned())),
                                 Call(Var::Name("dummy".to_owned())),
-                                Const(Opcode::I32Const(9)),
+                                Instr::i32(9),
                             ],
                         ),
                     ],
@@ -723,14 +764,8 @@ mod tests {
                                 GetLocal(Var::Index(1)),
                                 If(
                                     BlockType::Value(I32),
-                                    vec![
-                                        Call(Var::Name("dummy".to_owned())),
-                                        Const(Opcode::I32Const(9)),
-                                    ],
-                                    vec![
-                                        Call(Var::Name("dummy".to_owned())),
-                                        Const(Opcode::I32Const(10)),
-                                    ],
+                                    vec![Call(Var::Name("dummy".to_owned())), Instr::i32(9)],
+                                    vec![Call(Var::Name("dummy".to_owned())), Instr::i32(10)],
                                 ),
                             ],
                             vec![
@@ -757,14 +792,8 @@ mod tests {
                                 GetLocal(Var::Index(1)),
                                 If(
                                     BlockType::Value(I32),
-                                    vec![
-                                        Call(Var::Name("dummy".to_owned())),
-                                        Const(Opcode::I32Const(10)),
-                                    ],
-                                    vec![
-                                        Call(Var::Name("dummy".to_owned())),
-                                        Const(Opcode::I32Const(11)),
-                                    ],
+                                    vec![Call(Var::Name("dummy".to_owned())), Instr::i32(10)],
+                                    vec![Call(Var::Name("dummy".to_owned())), Instr::i32(11)],
                                 ),
                             ],
                         ),

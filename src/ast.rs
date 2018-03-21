@@ -2,7 +2,8 @@ use itertools;
 use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, NameMap, Opcode, Type,
                             TypeSection, ValueType};
 
-use parse::{value_type, var, FunctionTypeExt, TypeSectionExt, Value, Var};
+use parse::{value_type, var, FunctionTypeExt, TypeSectionExt, Var};
+use ops::{binary, compare, constant, convert, load, store, test, unary};
 use func::func_type;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,7 +53,7 @@ pub enum Instr {
     /// grow linear memory
     GrowMemory,
     /// constant
-    Const(Value),
+    Const(Opcode),
     /// numeric test
     Test(Opcode),
     /// numeric comparison
@@ -114,8 +115,16 @@ named!(
             ws!(preceded!(tag!("tee_local"), var)) => { |var| Instr::TeeLocal(var) } |
             ws!(preceded!(tag!("get_global"), var)) => { |var| Instr::GetGlobal(var) } |
             ws!(preceded!(tag!("set_global"), var)) => { |var| Instr::SetGlobal(var) } |
+            load => { |load| Instr::Load(load) } |
+            store => { |store| Instr::Store(store) } |
             tag!("current_memory") => { |_| Instr::CurrentMemory } |
-            tag!("grow_memory") => { |_| Instr::GrowMemory }
+            tag!("grow_memory") => { |_| Instr::GrowMemory } |
+            constant => { |constant| Instr::Const(constant) } |
+            test => { |test| Instr::Test(test) } |
+            compare => { |compare| Instr::Compare(compare) } |
+            unary => { |unary| Instr::Unary(unary) } |
+            binary => { |binary| Instr::Binary(binary) } |
+            convert => { |convert| Instr::Convert(convert) }
         )
     )
 );
@@ -285,84 +294,64 @@ mod tests {
     use nom::IResult::*;
 
     use super::*;
+    use super::Instr::*;
 
     #[test]
     fn parse_plain_instr() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"unreachable", Done(&[][..], Instr::Unreachable)),
-            (b"nop", Done(&[][..], Instr::Nop)),
-            (b"br 123", Done(&[][..], Instr::Br(Var::Index(123)))),
-            (
-                b"br $end",
-                Done(&[][..], Instr::Br(Var::Name("end".to_owned()))),
-            ),
-            (b"br_if 123", Done(&[][..], Instr::BrIf(Var::Index(123)))),
+            (b"unreachable", Done(&[][..], Unreachable)),
+            (b"nop", Done(&[][..], Nop)),
+            (b"br 123", Done(&[][..], Br(Var::Index(123)))),
+            (b"br $end", Done(&[][..], Br(Var::Name("end".to_owned())))),
+            (b"br_if 123", Done(&[][..], BrIf(Var::Index(123)))),
             (
                 b"br_if $end",
-                Done(&[][..], Instr::BrIf(Var::Name("end".to_owned()))),
+                Done(&[][..], BrIf(Var::Name("end".to_owned()))),
             ),
-            (
-                b"br_table 0",
-                Done(&[][..], Instr::BrTable(vec![], Var::Index(0))),
-            ),
+            (b"br_table 0", Done(&[][..], BrTable(vec![], Var::Index(0)))),
             (
                 b"br_table 0 1 2 3",
                 Done(
                     &[][..],
-                    Instr::BrTable(
+                    BrTable(
                         vec![Var::Index(1), Var::Index(2), Var::Index(3)],
                         Var::Index(0),
                     ),
                 ),
             ),
-            (b"return", Done(&[][..], Instr::Return)),
-            (b"call 123", Done(&[][..], Instr::Call(Var::Index(123)))),
+            (b"return", Done(&[][..], Return)),
+            (b"call 123", Done(&[][..], Call(Var::Index(123)))),
             (
                 b"call $name",
-                Done(&[][..], Instr::Call(Var::Name("name".to_owned()))),
+                Done(&[][..], Call(Var::Name("name".to_owned()))),
             ),
-            (
-                b"get_local 123",
-                Done(&[][..], Instr::GetLocal(Var::Index(123))),
-            ),
+            (b"get_local 123", Done(&[][..], GetLocal(Var::Index(123)))),
             (
                 b"get_local $name",
-                Done(&[][..], Instr::GetLocal(Var::Name("name".to_owned()))),
+                Done(&[][..], GetLocal(Var::Name("name".to_owned()))),
             ),
-            (
-                b"set_local 123",
-                Done(&[][..], Instr::SetLocal(Var::Index(123))),
-            ),
+            (b"set_local 123", Done(&[][..], SetLocal(Var::Index(123)))),
             (
                 b"set_local $name",
-                Done(&[][..], Instr::SetLocal(Var::Name("name".to_owned()))),
+                Done(&[][..], SetLocal(Var::Name("name".to_owned()))),
             ),
-            (
-                b"tee_local 123",
-                Done(&[][..], Instr::TeeLocal(Var::Index(123))),
-            ),
+            (b"tee_local 123", Done(&[][..], TeeLocal(Var::Index(123)))),
             (
                 b"tee_local $name",
-                Done(&[][..], Instr::TeeLocal(Var::Name("name".to_owned()))),
+                Done(&[][..], TeeLocal(Var::Name("name".to_owned()))),
             ),
-            (
-                b"get_global 123",
-                Done(&[][..], Instr::GetGlobal(Var::Index(123))),
-            ),
+            (b"get_global 123", Done(&[][..], GetGlobal(Var::Index(123)))),
             (
                 b"get_global $name",
-                Done(&[][..], Instr::GetGlobal(Var::Name("name".to_owned()))),
+                Done(&[][..], GetGlobal(Var::Name("name".to_owned()))),
             ),
-            (
-                b"set_global 123",
-                Done(&[][..], Instr::SetGlobal(Var::Index(123))),
-            ),
+            (b"set_global 123", Done(&[][..], SetGlobal(Var::Index(123)))),
             (
                 b"set_global $name",
-                Done(&[][..], Instr::SetGlobal(Var::Name("name".to_owned()))),
+                Done(&[][..], SetGlobal(Var::Name("name".to_owned()))),
             ),
-            (b"current_memory", Done(&[][..], Instr::CurrentMemory)),
-            (b"grow_memory", Done(&[][..], Instr::GrowMemory)),
+            (b"current_memory", Done(&[][..], CurrentMemory)),
+            (b"grow_memory", Done(&[][..], GrowMemory)),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -377,27 +366,27 @@ mod tests {
         let tests: Vec<(&[u8], _)> = vec![
             (
                 b"call_indirect 123",
-                Done(&[][..], Instr::CallIndirect(Var::Index(123))),
+                Done(&[][..], CallIndirect(Var::Index(123))),
             ),
             (
                 b"call_indirect $hello",
-                Done(&[][..], Instr::CallIndirect(Var::Name("hello".to_owned()))),
+                Done(&[][..], CallIndirect(Var::Name("hello".to_owned()))),
             ),
             (
                 b"call_indirect (type $hello)",
-                Done(&[][..], Instr::CallIndirect(Var::Name("hello".to_owned()))),
+                Done(&[][..], CallIndirect(Var::Name("hello".to_owned()))),
             ),
             (
                 b"call_indirect (param i32)",
-                Done(&[][..], Instr::CallIndirect(Var::Index(0))),
+                Done(&[][..], CallIndirect(Var::Index(0))),
             ),
             (
                 b"call_indirect (param i64)",
-                Done(&[][..], Instr::CallIndirect(Var::Index(1))),
+                Done(&[][..], CallIndirect(Var::Index(1))),
             ),
             (
                 b"call_indirect (param i32) (param i64) (result f32)",
-                Done(&[][..], Instr::CallIndirect(Var::Index(2))),
+                Done(&[][..], CallIndirect(Var::Index(2))),
             ),
         ];
 
@@ -437,47 +426,38 @@ mod tests {
         let tests: Vec<(&[u8], _)> = vec![
             (
                 b"block\nend",
-                Done(&[][..], Instr::Block(BlockType::NoResult, vec![])),
+                Done(&[][..], Block(BlockType::NoResult, vec![])),
             ),
             (
                 b"block (result i32)\nend",
-                Done(
-                    &[][..],
-                    Instr::Block(BlockType::Value(ValueType::I32), vec![]),
-                ),
+                Done(&[][..], Block(BlockType::Value(ValueType::I32), vec![])),
             ),
             (
                 b"block $done\nend $done",
-                Done(&[][..], Instr::Block(BlockType::NoResult, vec![])),
+                Done(&[][..], Block(BlockType::NoResult, vec![])),
             ),
             (
                 b"block $done (result i32)\nend $done",
-                Done(
-                    &[][..],
-                    Instr::Block(BlockType::Value(ValueType::I32), vec![]),
-                ),
+                Done(&[][..], Block(BlockType::Value(ValueType::I32), vec![])),
             ),
             (
                 b"block $done (result i32) nop\nend $done",
-                Done(
-                    &[][..],
-                    Instr::Block(BlockType::Value(ValueType::I32), vec![Instr::Nop]),
-                ),
+                Done(&[][..], Block(BlockType::Value(ValueType::I32), vec![Nop])),
             ),
             (
                 b"loop $done (result i32) unreachable\nend $done",
                 Done(
                     &[][..],
-                    Instr::Loop(BlockType::Value(ValueType::I32), vec![Instr::Unreachable]),
+                    Loop(BlockType::Value(ValueType::I32), vec![Unreachable]),
                 ),
             ),
             (
                 b"if $done (result i32) nop unreachable\nend $done",
                 Done(
                     &[][..],
-                    Instr::If(
+                    If(
                         BlockType::Value(ValueType::I32),
-                        vec![Instr::Nop, Instr::Unreachable],
+                        vec![Nop, Unreachable],
                         vec![],
                     ),
                 ),
@@ -486,10 +466,10 @@ mod tests {
                 b"if $done (result i32) nop\nelse unreachable\nend $done",
                 Done(
                     &[][..],
-                    Instr::If(
+                    If(
                         BlockType::Value(ValueType::I32),
-                        vec![Instr::Nop],
-                        vec![Instr::Unreachable],
+                        vec![Nop],
+                        vec![Unreachable],
                     ),
                 ),
             ),
@@ -515,8 +495,8 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(BlockType::NoResult, vec![], vec![]),
+                        GetLocal(Var::Index(0)),
+                        If(BlockType::NoResult, vec![], vec![]),
                     ],
                 ),
             ),
@@ -525,8 +505,8 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(BlockType::NoResult, vec![], vec![]),
+                        GetLocal(Var::Index(0)),
+                        If(BlockType::NoResult, vec![], vec![]),
                     ],
                 ),
             ),
@@ -535,8 +515,8 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(BlockType::NoResult, vec![], vec![]),
+                        GetLocal(Var::Index(0)),
+                        If(BlockType::NoResult, vec![], vec![]),
                     ],
                 ),
             ),
@@ -545,8 +525,8 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(BlockType::NoResult, vec![], vec![]),
+                        GetLocal(Var::Index(0)),
+                        If(BlockType::NoResult, vec![], vec![]),
                     ],
                 ),
             ),
@@ -555,8 +535,8 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(BlockType::NoResult, vec![Instr::Nop], vec![]),
+                        GetLocal(Var::Index(0)),
+                        If(BlockType::NoResult, vec![Nop], vec![]),
                     ],
                 ),
             ),
@@ -565,8 +545,8 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(BlockType::NoResult, vec![Instr::Nop], vec![Instr::Nop]),
+                        GetLocal(Var::Index(0)),
+                        If(BlockType::NoResult, vec![Nop], vec![Nop]),
                     ],
                 ),
             ),
@@ -575,12 +555,8 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(
-                            BlockType::Value(ValueType::I32),
-                            vec![Instr::Nop],
-                            vec![Instr::Nop],
-                        ),
+                        GetLocal(Var::Index(0)),
+                        If(BlockType::Value(ValueType::I32), vec![Nop], vec![Nop]),
                     ],
                 ),
             ),
@@ -589,13 +565,13 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(
+                        GetLocal(Var::Index(0)),
+                        If(
                             BlockType::NoResult,
                             vec![
-                                Instr::Call(Var::Name("dummy".to_owned())),
-                                Instr::Call(Var::Name("dummy".to_owned())),
-                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
                             ],
                             vec![],
                         ),
@@ -607,14 +583,14 @@ mod tests {
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(
+                        GetLocal(Var::Index(0)),
+                        If(
                             BlockType::NoResult,
                             vec![],
                             vec![
-                                Instr::Call(Var::Name("dummy".to_owned())),
-                                Instr::Call(Var::Name("dummy".to_owned())),
-                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
                             ],
                         ),
                     ],
@@ -622,24 +598,121 @@ mod tests {
             ),
             (
                 b"(if (result i32) (get_local 0)
-                    (then (call $dummy) (call $dummy) (call $dummy))
-                    (else (call $dummy) (call $dummy) (call $dummy))
+                    (then (call $dummy) (call $dummy) (i32.const 8))
+                    (else (call $dummy) (call $dummy) (i32.const 9))
                 )",
                 Done(
                     &[][..],
                     vec![
-                        Instr::GetLocal(Var::Index(0)),
-                        Instr::If(
+                        GetLocal(Var::Index(0)),
+                        If(
                             BlockType::Value(ValueType::I32),
                             vec![
-                                Instr::Call(Var::Name("dummy".to_owned())),
-                                Instr::Call(Var::Name("dummy".to_owned())),
-                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Const(Opcode::I32Const(8)),
                             ],
                             vec![
-                                Instr::Call(Var::Name("dummy".to_owned())),
-                                Instr::Call(Var::Name("dummy".to_owned())),
-                                Instr::Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Name("dummy".to_owned())),
+                                Const(Opcode::I32Const(9)),
+                            ],
+                        ),
+                    ],
+                ),
+            ),
+            (
+                b"(if (result i32) (get_local 0)
+                    (then
+                        (if (get_local 1) (then (call $dummy) (block) (nop)))
+                        (if (get_local 1) (then) (else (call $dummy) (block) (nop)))
+                        (if (result i32) (get_local 1)
+                            (then (call $dummy) (i32.const 9))
+                            (else (call $dummy) (i32.const 10))
+                        )
+                    )
+                    (else
+                        (if (get_local 1) (then (call $dummy) (block) (nop)))
+                        (if (get_local 1) (then) (else (call $dummy) (block) (nop)))
+                        (if (result i32) (get_local 1)
+                            (then (call $dummy) (i32.const 10))
+                            (else (call $dummy) (i32.const 11))
+                        )
+                    )
+                )",
+                Done(
+                    &[][..],
+                    vec![
+                        GetLocal(Var::Index(0)),
+                        If(
+                            BlockType::Value(ValueType::I32),
+                            vec![
+                                GetLocal(Var::Index(1)),
+                                If(
+                                    BlockType::NoResult,
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Block(BlockType::NoResult, vec![]),
+                                        Nop,
+                                    ],
+                                    vec![],
+                                ),
+                                GetLocal(Var::Index(1)),
+                                If(
+                                    BlockType::NoResult,
+                                    vec![],
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Block(BlockType::NoResult, vec![]),
+                                        Nop,
+                                    ],
+                                ),
+                                GetLocal(Var::Index(1)),
+                                If(
+                                    BlockType::Value(ValueType::I32),
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Const(Opcode::I32Const(9)),
+                                    ],
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Const(Opcode::I32Const(10)),
+                                    ],
+                                ),
+                            ],
+                            vec![
+                                GetLocal(Var::Index(1)),
+                                If(
+                                    BlockType::NoResult,
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Block(BlockType::NoResult, vec![]),
+                                        Nop,
+                                    ],
+                                    vec![],
+                                ),
+                                GetLocal(Var::Index(1)),
+                                If(
+                                    BlockType::NoResult,
+                                    vec![],
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Block(BlockType::NoResult, vec![]),
+                                        Nop,
+                                    ],
+                                ),
+                                GetLocal(Var::Index(1)),
+                                If(
+                                    BlockType::Value(ValueType::I32),
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Const(Opcode::I32Const(10)),
+                                    ],
+                                    vec![
+                                        Call(Var::Name("dummy".to_owned())),
+                                        Const(Opcode::I32Const(11)),
+                                    ],
+                                ),
                             ],
                         ),
                     ],

@@ -267,7 +267,7 @@ named_args!(
 /// <val_type>.load((8|16|32)_<sign>)? <offset>? <align>?
 #[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
-    load<Opcode>,
+    pub load<Opcode>,
     ws!(do_parse!(
         op: recognize!(tuple!(value_type, tag!(".load"), opt!(complete!(tuple!(mem_size, tag!("_"), sign))))) >>
         offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
@@ -298,7 +298,7 @@ named!(
 /// <val_type>.store(8|16|32)? <offset>? <align>?
 #[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
-    store<Opcode>,
+    pub store<Opcode>,
     ws!(do_parse!(
         op: recognize!(tuple!(
                 value_type,
@@ -350,7 +350,7 @@ named!(
 
 /// <val_type>.const <value>
 named!(
-    constant<Opcode>,
+    pub constant<Opcode>,
     ws!(switch!(recognize!(pair!(value_type, tag!(".const"))),
             b"i32.const" => map!(int32, |n| Opcode::I32Const(n)) |
             b"i64.const" => map!(int64, |n| Opcode::I64Const(n)) |
@@ -361,7 +361,7 @@ named!(
 
 // <val_type>.<testop>
 named!(
-    test<Opcode>,
+    pub test<Opcode>,
     switch!(recognize!(tuple!(int_type, tag!("."), testop)),
         b"i32.eqz" => value!(Opcode::I32Eqz) |
         b"i64.eqz" => value!(Opcode::I64Eqz)
@@ -372,7 +372,7 @@ named!(testop, tag!("eqz"));
 
 /// <val_type>.<unop>
 named!(
-    unary<Opcode>,
+    pub unary<Opcode>,
     switch!(recognize!(tuple!(int_type, tag!("."), unop)),
         b"i32.clz" => value!(Opcode::I32Clz) |
         b"i32.ctz" => value!(Opcode::I32Ctz) |
@@ -410,7 +410,7 @@ named!(
 
 /// <val_type>.<binop>
 named!(
-    binary<Opcode>,
+    pub binary<Opcode>,
     alt!(
         tag!("i32.add") => { |_| Opcode::I32Add } |
 		tag!("i32.sub") => { |_| Opcode::I32Sub } |
@@ -464,7 +464,7 @@ named!(
 
 ///<val_type>.<relop>
 named!(
-    compare<Opcode>,
+    pub compare<Opcode>,
     alt!(
         tag!("i32.eq") => { |_| Opcode::I32Eq } |
 		tag!("i32.ne") => { |_| Opcode::I32Ne } |
@@ -506,7 +506,7 @@ named!(
 
 /// <val_type>.<cvtop>/<val_type>
 named!(
-    convert<Opcode>,
+    pub convert<Opcode>,
     alt!(
 		tag!("i32.wrap/i64") => { |_| Opcode::I32WrapI64 } |
 		tag!("i32.trunc_s/f32") => { |_| Opcode::I32TruncSF32 } |

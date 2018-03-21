@@ -24,11 +24,13 @@ named_args!(
 
 named!(
     pub func_type<FunctionType>,
-    map!(
-        ws!(pair!(many0!(param), opt!(complete!(result)))),
-        |(params, result_type)| FunctionType::new(
-            params.into_iter().flat_map(|param| param).collect(),
-            result_type.unwrap_or_default()
+    parsing!(FuncType,
+        map!(
+            ws!(pair!(many0!(param), opt!(complete!(result)))),
+            |(params, result_type)| FunctionType::new(
+                params.into_iter().flat_map(|param| param).collect(),
+                result_type.unwrap_or_default()
+            )
         )
     )
 );

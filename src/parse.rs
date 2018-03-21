@@ -1,5 +1,6 @@
 use std::{i32, i64};
 use std::str::{self, FromStr};
+use std::collections::HashMap;
 
 use failure::Error;
 use nom::{self, IResult};
@@ -14,6 +15,7 @@ use func::func_type;
 #[derive(Clone, Debug, Default)]
 pub struct Context {
     pub types: TypeSection,
+    pub typedefs: HashMap<String, usize>,
     pub tables: NameMap,
     pub memories: NameMap,
     pub funcs: FunctionNameSection,

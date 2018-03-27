@@ -11,6 +11,7 @@ use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, Function
 
 use errors::WastError;
 use func::func_type;
+use ast::Global;
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
@@ -20,7 +21,8 @@ pub struct Context {
     pub memories: NameMap,
     pub funcs: FunctionNameSection,
     pub locals: NameMap,
-    pub globals: NameMap,
+    pub globals: Vec<Global>,
+    pub global_names: HashMap<String, usize>,
     pub labels: NameMap,
 }
 
@@ -34,21 +36,46 @@ impl FunctionTypeExt for FunctionType {
     }
 }
 
-pub trait TypeSectionExt {
-    fn get(&mut self, func_type: FunctionType) -> Option<usize>;
+pub trait IndexSpace {
+    type Element: PartialEq;
 
-    fn get_or_insert(&mut self, func_type: FunctionType) -> usize;
+    fn get(&mut self, element: &Self::Element) -> Option<usize>;
+
+    fn get_or_insert(&mut self, element: Self::Element) -> usize;
 }
 
-impl TypeSectionExt for TypeSection {
-    fn get(&mut self, func_type: FunctionType) -> Option<usize> {
+impl<T> IndexSpace for Vec<T>
+where
+    T: PartialEq,
+{
+    type Element = T;
+
+    fn get(&mut self, element: &Self::Element) -> Option<usize> {
+        self.iter().position(|el| el == element)
+    }
+
+    fn get_or_insert(&mut self, element: Self::Element) -> usize {
+        self.get(&element).unwrap_or_else(|| {
+            let idx = self.len();
+
+            self.push(element);
+
+            idx
+        })
+    }
+}
+
+impl IndexSpace for TypeSection {
+    type Element = FunctionType;
+
+    fn get(&mut self, func_type: &FunctionType) -> Option<usize> {
         self.types()
             .iter()
             .position(|ty| Type::Function(func_type.clone()) == *ty)
     }
 
     fn get_or_insert(&mut self, func_type: FunctionType) -> usize {
-        self.get(func_type.clone()).unwrap_or_else(|| {
+        self.get(&func_type).unwrap_or_else(|| {
             let idx = self.types().len();
 
             self.types_mut().push(Type::Function(func_type));
@@ -416,6 +443,27 @@ named!(
         )
     )
 );
+
+#[macro_export]
+macro_rules! first(
+    ($input:expr, $submacro:ident!($($arguments:tt)*)) => (
+        {
+            preceded!(
+                $input,
+                call!($crate::parse::skip),
+                $submacro!($($arguments)*)
+            )
+        }
+    );
+
+    ($input:expr, $f:expr) => (
+        first!($input, call!($f));
+    );
+);
+
+named!(pub skip, recognize!(many0!(alt!(comment | whitespace))));
+
+named!(pub whitespace, is_a!(" \t\n\r"));
 
 #[cfg(test)]
 mod tests {

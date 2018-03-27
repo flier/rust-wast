@@ -1,10 +1,44 @@
-use itertools;
-use parity_wasm::elements::{BlockType, FunctionType, Opcode, Type, ValueType};
+use std::mem;
 
-use parse::{value_type, var, Context, FunctionTypeExt, TypeSectionExt, Var, float32, float64,
-            int32, int64};
+use itertools;
+use parity_wasm::elements::{BlockType, FunctionType, GlobalEntry, GlobalType, InitExpr, Opcode,
+                            Type, ValueType};
+
+use parse::{value_type, var, Context, FunctionTypeExt, IndexSpace, Var, float32, float64, int32,
+            int64};
 use ops::{align, binary, compare, convert, mem_size, offset, sign, test, unary};
 use func::func_type;
+
+#[derive(Clone, Debug)]
+pub struct Global {
+    pub global_type: GlobalType,
+    pub init_expr: Vec<Instr>,
+}
+
+impl PartialEq for Global {
+    fn eq(&self, other: &Self) -> bool {
+        self.global_type.content_type() == other.global_type.content_type()
+            && self.global_type.is_mutable() == other.global_type.is_mutable()
+            && self.init_expr == other.init_expr
+    }
+}
+
+impl Global {
+    pub fn eval(&self, ctxt: &Context) -> GlobalEntry {
+        GlobalEntry::new(
+            self.global_type.clone(),
+            InitExpr::new(
+                self.init_expr
+                    .iter()
+                    .flat_map(|instr| match *instr {
+                        Instr::Const(ref constant) => Some(constant.clone().into()),
+                        _ => None,
+                    })
+                    .collect(),
+            ),
+        )
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instr {
@@ -103,8 +137,8 @@ impl From<Constant> for Opcode {
         match constant {
             Constant::I32(v) => Opcode::I32Const(v),
             Constant::I64(v) => Opcode::I64Const(v),
-            Constant::F32(v) => Opcode::F32Const(v as u32),
-            Constant::F64(v) => Opcode::F64Const(v as u64),
+            Constant::F32(v) => Opcode::F32Const(unsafe { mem::transmute(v) }),
+            Constant::F64(v) => Opcode::F64Const(unsafe { mem::transmute(v) }),
         }
     }
 }
@@ -262,7 +296,7 @@ named!(
 );
 
 named_args!(
-    instr_list<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
+    pub instr_list<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
     map!(ws!(many0!(apply!(instr, ctxt))), |instrs| itertools::flatten(instrs).collect())
 );
 

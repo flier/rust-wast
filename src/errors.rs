@@ -33,6 +33,7 @@ pub enum Parsing {
     IfBlock,
     FuncType,
     TypeDef,
+    Global,
 }
 
 impl From<Parsing> for ErrorKind {
@@ -66,6 +67,7 @@ lazy_static!{
         values.insert(Parsing::IfBlock as u32, "if_block");
         values.insert(Parsing::FuncType as u32, "func_type");
         values.insert(Parsing::TypeDef as u32, "typedef");
+        values.insert(Parsing::Global as u32, "global");
 
         values
     };

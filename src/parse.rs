@@ -1,5 +1,4 @@
 use std::{i32, i64};
-use std::collections::HashMap;
 use std::str::{self, FromStr};
 
 use failure::Error;
@@ -8,25 +7,8 @@ use nom::ErrorKind::*;
 use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, FunctionType, GlobalType, ImportEntry,
                             Internal, MemoryType, NameMap, TableType, Type, TypeSection, ValueType};
 
-use ast::{Data, Elem, Global, Table};
-use errors::WastError;
 use func::func_type;
-
-#[derive(Clone, Debug, Default)]
-pub struct Context {
-    pub types: TypeSection,
-    pub typedefs: HashMap<String, usize>,
-    pub tables: Vec<Table>,
-    pub table_names: HashMap<String, usize>,
-    pub elems: Vec<Elem>,
-    pub memories: NameMap,
-    pub data: Vec<Data>,
-    pub funcs: FunctionNameSection,
-    pub locals: NameMap,
-    pub globals: Vec<Global>,
-    pub global_names: HashMap<String, usize>,
-    pub labels: NameMap,
-}
+use errors::WastError;
 
 pub trait FunctionTypeExt {
     fn is_empty(&self) -> bool;

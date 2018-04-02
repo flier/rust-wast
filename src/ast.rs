@@ -1,14 +1,31 @@
 use std::mem;
+use std::collections::HashMap;
 
 use failure::{err_msg, Error};
 use itertools;
 use parity_wasm::builder::{TableDefinition, TableEntryDefinition};
-use parity_wasm::elements::{BlockType, FunctionType, GlobalEntry, GlobalType, InitExpr, Opcode, TableType, Type,
-                            ValueType};
+use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, GlobalEntry, GlobalType, InitExpr, NameMap,
+                            Opcode, TableType, Type, TypeSection, ValueType};
 
 use func::func_type;
 use ops::{align, binary, compare, convert, mem_size, offset, sign, test, unary};
-use parse::{value_type, var, Context, FunctionTypeExt, IndexSpace, Var, float32, float64, int32, int64};
+use parse::{value_type, var, FunctionTypeExt, IndexSpace, Var, float32, float64, int32, int64};
+
+#[derive(Clone, Debug, Default)]
+pub struct Context {
+    pub types: TypeSection,
+    pub typedefs: HashMap<String, usize>,
+    pub tables: Vec<Table>,
+    pub table_names: HashMap<String, usize>,
+    pub elems: Vec<Elem>,
+    pub memories: NameMap,
+    pub data: Vec<Data>,
+    pub funcs: FunctionNameSection,
+    pub locals: NameMap,
+    pub globals: Vec<Global>,
+    pub global_names: HashMap<String, usize>,
+    pub labels: NameMap,
+}
 
 #[derive(Clone, Debug)]
 pub struct Global {

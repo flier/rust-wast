@@ -4,9 +4,8 @@ use nom::IResult;
 use parity_wasm::builder::{signature, ModuleBuilder};
 use parity_wasm::elements::{FunctionType, GlobalType, InitExpr, Module, TableType, Type, ValueType};
 
-use ast::{init_expr, Data, Elem, Global, Table};
-use parse::{elem_type, string, string_list, table_type, value_type, value_type_list, var, var_list, Context,
-            IndexSpace, Var};
+use ast::{init_expr, Context, Data, Elem, Global, Table};
+use parse::{elem_type, string, string_list, table_type, value_type, value_type_list, var, var_list, IndexSpace, Var};
 
 fn module(input: &[u8]) -> IResult<&[u8], Module> {
     let mut ctxt = Context::default();

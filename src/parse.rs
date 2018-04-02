@@ -7,8 +7,8 @@ use nom::ErrorKind::*;
 use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, FunctionType, GlobalType, ImportEntry,
                             Internal, MemoryType, NameMap, TableType, Type, TypeSection, ValueType};
 
-use func::func_type;
 use errors::WastError;
+use func::func_type;
 
 pub trait FunctionTypeExt {
     fn is_empty(&self) -> bool;
@@ -394,7 +394,7 @@ named!(
 named!(limits<(u32, Option<u32>)>, pair!(first!(nat32), opt!(first!(nat32))));
 
 named!(
-    memory_type<MemoryType>,
+    pub memory_type<MemoryType>,
     map!(ws!(pair!(nat32, opt!(nat32))), |(min, max)| MemoryType::new(min, max))
 );
 

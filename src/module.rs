@@ -2,24 +2,25 @@ use failure::Error;
 use nom::IResult;
 
 use parity_wasm::builder::{signature, ModuleBuilder};
-use parity_wasm::elements::{FunctionType, GlobalType, InitExpr, Module, TableType, Type, ValueType};
+use parity_wasm::elements::{FunctionType, GlobalType, InitExpr, MemoryType, Module, TableType, Type, ValueType};
 
-use ast::{init_expr, Context, Data, Elem, Global, Table};
-use parse::{elem_type, string, string_list, table_type, value_type, value_type_list, var, var_list, IndexSpace, Var};
+use ast::{init_expr, Context, Data, Elem, Global, Memory, Table};
+use parse::{elem_type, memory_type, name, string, string_list, table_type, value_type, value_type_list, var, var_list,
+            IndexSpace, Var};
 
 fn module(input: &[u8]) -> IResult<&[u8], Module> {
     let mut ctxt = Context::default();
 
     map_res!(
         input,
-        ws!(delimited!(
+        delimited!(
             tag!("("),
             preceded!(
                 first!(tag!("module")),
                 pair!(opt!(first!(var)), many0!(first!(apply!(module_field, &mut ctxt))))
             ),
             tag!(")")
-        )),
+        ),
         |_| -> Result<Module, Error> {
             let mut builder = ModuleBuilder::new().with_signatures(
                 ctxt.types
@@ -79,39 +80,50 @@ named_args!(
                 ctxt.table_names.insert(name, table_ref);
             }
         }} |
-        data => { |data| {
-            trace!("data {:?}", data);
-
-            ctxt.data.get_or_insert(data);
-        }} |
         elem => { |elem| {
             trace!("elem {:?}", elem);
 
             ctxt.elems.get_or_insert(elem);
+        }} |
+        memory => { |(bind, memory)| {
+            trace!("memory {:?} = {:?}", bind, memory);
+
+            let mem_ref = ctxt.memories.get_or_insert(memory);
+
+            if let Some(Var::Name(name)) = bind {
+                ctxt.memory_names.insert(name, mem_ref);
+            }
+        }} |
+        data => { |data| {
+            trace!("data {:?}", data);
+
+            ctxt.data.get_or_insert(data);
         }}
     )
 );
+
+named!(bind_var<Var>, map!(name, |s| Var::Name(s.to_owned())));
 
 named!(
     type_def<(Option<Var>, FunctionType)>,
     parsing!(
         TypeDef,
-        ws!(delimited!(
+        delimited!(
             tag!("("),
-            preceded!(first!(tag!("type")), pair!(opt!(first!(var)), first!(def_type))),
+            preceded!(first!(tag!("type")), pair!(opt!(first!(bind_var)), first!(def_type))),
             tag!(")")
-        ))
+        )
     )
 );
 
 named!(
     def_type<FunctionType>,
     map!(
-        ws!(delimited!(
+        delimited!(
             tag!("("),
             preceded!(first!(tag!("func")), opt!(first!(func_type))),
             tag!(")")
-        )),
+        ),
         |ft| ft.unwrap_or_default()
     )
 );
@@ -121,7 +133,7 @@ named!(
     parsing!(
         FuncType,
         map!(
-            ws!(pair!(many0!(first!(param)), opt!(complete!(first!(result))))),
+            pair!(many0!(first!(param)), opt!(complete!(first!(result)))),
             |(params, result_type)| FunctionType::new(
                 params.into_iter().flat_map(|param| param).collect(),
                 result_type.unwrap_or_default()
@@ -132,7 +144,7 @@ named!(
 
 named!(
     param<Vec<ValueType>>,
-    ws!(delimited!(
+    delimited!(
         tag!("("),
         preceded!(
             first!(tag!("param")),
@@ -142,27 +154,30 @@ named!(
             )
         ),
         tag!(")")
-    ))
+    )
 );
 
 named!(
     result<Option<ValueType>>,
-    ws!(delimited!(
+    delimited!(
         tag!("("),
         preceded!(first!(tag!("result")), opt!(first!(value_type))),
         tag!(")")
-    ))
+    )
 );
 
 named!(
     global<(Option<Var>, Global)>,
     parsing!(
         Global,
-        ws!(delimited!(
+        delimited!(
             tag!("("),
-            preceded!(first!(tag!("global")), pair!(opt!(first!(var)), first!(global_fields))),
+            preceded!(
+                first!(tag!("global")),
+                pair!(opt!(first!(bind_var)), first!(global_fields))
+            ),
             tag!(")")
-        ))
+        )
     )
 );
 
@@ -191,53 +206,51 @@ named!(
 
 named!(
     mut_value_type<ValueType>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(first!(tag!("mut")), first!(value_type)),
-        tag!(")")
-    ))
+    delimited!(tag!("("), preceded!(first!(tag!("mut")), first!(value_type)), tag!(")"))
 );
 
 named!(
     inline_import<(String, String)>,
-    ws!(delimited!(
+    delimited!(
         tag!("("),
         preceded!(first!(tag!("import")), pair!(first!(string), first!(string))),
         tag!(")")
-    ))
+    )
 );
 
 named!(
     inline_export<String>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(first!(tag!("export")), first!(string)),
-        tag!(")")
-    ))
+    delimited!(tag!("("), preceded!(first!(tag!("export")), first!(string)), tag!(")"))
 );
 
 named!(
     table<(Option<Var>, Table)>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(first!(tag!("table")), pair!(opt!(first!(var)), first!(table_fields))),
-        tag!(")")
-    ))
+    parsing!(
+        Table,
+        dbg_dmp!(delimited!(
+            tag!("("),
+            preceded!(
+                first!(tag!("table")),
+                pair!(opt!(first!(bind_var)), first!(table_fields))
+            ),
+            tag!(")")
+        ))
+    )
 );
 
 named!(
     table_fields<Table>,
-    alt!(
+    alt_complete!(
         first!(table_type) => { |table_type| Table { table_type, elements: vec![] } } |
         pair!(first!(inline_import), first!(table_type)) => {
             |((module_name, item_name), table_type)| Table { table_type, elements: vec![] }
         } |
         pair!(first!(inline_export), first!(table_fields)) => {
-            |(export_name, table_def)| table_def
+            |(export_name, table)| table
         } |
         preceded!(
             first!(elem_type),
-            ws!(delimited!(
+            first!(delimited!(
                 tag!("("),
                 preceded!(first!(tag!("elem")), var_list),
                 tag!(")")
@@ -253,43 +266,92 @@ named!(
 
 named!(
     elem<Elem>,
-    parsing!(Elem,
-        map!(ws!(delimited!(
-            tag!("("),
-            preceded!(
-                first!(tag!("elem")),
-                tuple!(
-                    opt!(first!(var)),
-                    alt_complete!(first!(offset) | first!(init_expr)),
-                    var_list
-                )
+    parsing!(
+        Elem,
+        map!(
+            delimited!(
+                tag!("("),
+                preceded!(
+                    first!(tag!("elem")),
+                    tuple!(
+                        opt!(first!(var)),
+                        alt_complete!(first!(offset) | first!(init_expr)),
+                        var_list
+                    )
+                ),
+                tag!(")")
             ),
-            tag!(")")
-        )), |(table_index, offset, elements)| {
-            Elem {
+            |(table_index, offset, elements)| Elem {
                 table_index: table_index.unwrap_or(Var::Index(0)),
                 offset,
                 elements,
             }
-        })
+        )
+    )
+);
+
+named!(
+    memory<(Option<Var>, Memory)>,
+    parsing!(
+        Memory,
+        dbg_dmp!(delimited!(
+            tag!("("),
+            preceded!(
+                first!(tag!("memory")),
+                pair!(opt!(first!(bind_var)), first!(memory_fields))
+            ),
+            tag!(")")
+        ))
+    )
+);
+
+named!(
+    memory_fields<Memory>,
+    alt!(
+        first!(memory_type) => { |memory_type| Memory { memory_type, elements: vec![] } } |
+        pair!(first!(inline_import), first!(memory_type)) => {
+            |((module_name, item_name), memory_type)| Memory { memory_type, elements: vec![] }
+        } |
+        pair!(first!(inline_export), first!(memory_fields)) => {
+            |(export_name, memory)| memory
+        } |
+        delimited!(
+            tag!("("),
+            preceded!(first!(tag!("data")), string_list),
+            tag!(")")
+        ) => { |strs: Vec<String>|
+        {
+            let elements = strs.into_iter().fold(vec![], |mut value, s| {
+                value.extend_from_slice(s.as_bytes());
+                value
+            });
+
+            Memory{
+                memory_type: MemoryType::new(elements.len() as u32, Some(elements.len() as u32)),
+                elements,
+            }
+        }}
     )
 );
 
 named!(
     data<Data>,
-    parsing!(Data,
-        dbg_dmp!(map!(ws!(delimited!(
-            tag!("("),
-            preceded!(first!(tag!("data")),
-                tuple!(
-                    opt!(first!(var)),
-                    alt_complete!(first!(offset) | first!(init_expr)),
-                    string_list
-                )
+    parsing!(
+        Data,
+        dbg_dmp!(map!(
+            delimited!(
+                tag!("("),
+                preceded!(
+                    first!(tag!("data")),
+                    tuple!(
+                        opt!(first!(var)),
+                        alt_complete!(first!(offset) | first!(init_expr)),
+                        string_list
+                    )
+                ),
+                tag!(")")
             ),
-            tag!(")")
-        )), |(mem_index, offset, strs)| {
-            Data {
+            |(mem_index, offset, strs)| Data {
                 mem_index: mem_index.unwrap_or(Var::Index(0)),
                 offset,
                 value: strs.into_iter().fold(vec![], |mut value, s| {
@@ -297,7 +359,7 @@ named!(
                     value
                 }),
             }
-        }))
+        ))
     )
 );
 
@@ -477,6 +539,165 @@ mod tests {
                 (global_type, is_mutable, constant.clone()),
                 "parse global: {}",
                 unsafe { str::from_utf8_unchecked(code) },
+            );
+        }
+    }
+
+    #[test]
+    fn parse_table() {
+        let _ = pretty_env_logger::try_init();
+
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"(table anyfunc (elem $f))",
+                (
+                    None,
+                    Table {
+                        table_type: TableType::new(1, Some(1)),
+                        elements: vec![Var::Name("f".to_owned())],
+                    },
+                ),
+            ),
+            (
+                br#"(table (import "spectest" "table") 10 20 anyfunc)"#,
+                (
+                    None,
+                    Table {
+                        table_type: TableType::new(10, Some(20)),
+                        elements: vec![],
+                    },
+                ),
+            ),
+            (
+                br#"(table (export "table-10-inf") 10 anyfunc)"#,
+                (
+                    None,
+                    Table {
+                        table_type: TableType::new(10, None),
+                        elements: vec![],
+                    },
+                ),
+            ),
+        ];
+
+        for (code, ref result) in tests {
+            let res = table(code);
+
+            trace_parse_error!(code, res);
+
+            assert_eq!(res, IResult::Done(&[][..], result.clone()), "parse table: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_memory() {
+        let _ = pretty_env_logger::try_init();
+
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"(memory 0 0)",
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(0, Some(0)),
+                        elements: vec![],
+                    },
+                ),
+            ),
+            (
+                b"(memory 0 1)",
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(0, Some(1)),
+                        elements: vec![],
+                    },
+                ),
+            ),
+            (
+                b"(memory 1 256)",
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(1, Some(256)),
+                        elements: vec![],
+                    },
+                ),
+            ),
+            (
+                b"(memory 0 65536)",
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(0, Some(65536)),
+                        elements: vec![],
+                    },
+                ),
+            ),
+            (
+                b"(memory (data))",
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(0, Some(0)),
+                        elements: vec![],
+                    },
+                ),
+            ),
+            (
+                br#"(memory (data ""))"#,
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(0, Some(0)),
+                        elements: vec![],
+                    },
+                ),
+            ),
+            (
+                br#"(memory (data "x"))"#,
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(1, Some(1)),
+                        elements: b"x".to_vec(),
+                    },
+                ),
+            ),
+            (
+                br#"(memory (import "spectest" "memory") 1 2)"#,
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(1, Some(2)),
+                        elements: vec![],
+                    },
+                ),
+            ),
+            (
+                br#"(memory (export "memory-2-inf") 2)"#,
+                (
+                    None,
+                    Memory {
+                        memory_type: MemoryType::new(2, None),
+                        elements: vec![],
+                    },
+                ),
+            ),
+        ];
+
+        for (code, ref result) in tests {
+            let res = memory(code);
+
+            trace_parse_error!(code, res);
+
+            assert_eq!(
+                res,
+                IResult::Done(&[][..], result.clone()),
+                "parse memory: {}",
+                unsafe { str::from_utf8_unchecked(code) }
             );
         }
     }

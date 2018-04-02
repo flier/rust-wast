@@ -36,6 +36,8 @@ pub enum Parsing {
     FuncType,
     TypeDef,
     Global,
+    Table,
+    Memory,
     Data,
     Elem,
 }
@@ -72,6 +74,8 @@ lazy_static! {
         values.insert(Parsing::FuncType as u32, "func_type");
         values.insert(Parsing::TypeDef as u32, "typedef");
         values.insert(Parsing::Global as u32, "global");
+        values.insert(Parsing::Table as u32, "table");
+        values.insert(Parsing::Memory as u32, "memory");
         values.insert(Parsing::Data as u32, "data");
         values.insert(Parsing::Elem as u32, "elem");
 

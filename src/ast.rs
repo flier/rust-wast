@@ -4,8 +4,8 @@ use std::mem;
 use failure::{err_msg, Error};
 use itertools;
 use parity_wasm::builder::{TableDefinition, TableEntryDefinition};
-use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, GlobalEntry, GlobalType, InitExpr, NameMap,
-                            Opcode, TableType, TypeSection, ValueType};
+use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, GlobalEntry, GlobalType, InitExpr,
+                            MemoryType, NameMap, Opcode, TableType, TypeSection, ValueType};
 
 use func::func_type;
 use ops::{align, binary, compare, convert, mem_size, offset, sign, test, unary};
@@ -18,7 +18,8 @@ pub struct Context {
     pub tables: Vec<Table>,
     pub table_names: HashMap<String, usize>,
     pub elems: Vec<Elem>,
-    pub memories: NameMap,
+    pub memories: Vec<Memory>,
+    pub memory_names: HashMap<String, usize>,
     pub data: Vec<Data>,
     pub funcs: FunctionNameSection,
     pub locals: NameMap,
@@ -44,6 +45,20 @@ impl PartialEq for Global {
 impl Global {
     pub fn eval(&self, ctxt: &Context) -> Result<GlobalEntry, Error> {
         Ok(GlobalEntry::new(self.global_type.clone(), self.init_expr.clone()))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Memory {
+    pub memory_type: MemoryType,
+    pub elements: Vec<u8>,
+}
+
+impl PartialEq for Memory {
+    fn eq(&self, other: &Self) -> bool {
+        self.memory_type.limits().initial() == other.memory_type.limits().initial()
+            && self.memory_type.limits().maximum() == other.memory_type.limits().maximum()
+            && self.elements == other.elements
     }
 }
 
@@ -489,13 +504,11 @@ named!(
 
 named!(
     block<(BlockType, Vec<Instr>)>,
-    parsing!(Block,
+    parsing!(
+        Block,
         map!(
             pair!(opt!(first!(block_type)), first!(instr_list)),
-            |(block_type, instrs)| (
-                block_type.map_or(BlockType::NoResult, BlockType::Value),
-                instrs
-            )
+            |(block_type, instrs)| (block_type.map_or(BlockType::NoResult, BlockType::Value), instrs)
         )
     )
 );
@@ -505,12 +518,15 @@ named!(
     ws!(delimited!(tag!("("), preceded!(tag!("result"), value_type), tag!(")")))
 );
 
-named!(expr_list<Vec<Instr>>,
+named!(
+    expr_list<Vec<Instr>>,
     map!(ws!(many0!(first!(expr))), |instrs| itertools::flatten(instrs).collect())
 );
 
-named!(expr<Vec<Instr>>,
-    parsing!(Expr,
+named!(
+    expr<Vec<Instr>>,
+    parsing!(
+        Expr,
         ws!(delimited!(
             tag!("("),
             alt!(
@@ -544,7 +560,8 @@ named!(expr<Vec<Instr>>,
 
 named!(
     if_block<(Vec<Instr>, BlockType, Vec<Instr>, Vec<Instr>)>,
-    parsing!(IfBlock,
+    parsing!(
+        IfBlock,
         map!(
             pair!(opt!(block_type), first!(if_)),
             |(block_type, (cond, then, else_))| (
@@ -561,14 +578,10 @@ named!(
     if_<(Vec<Instr>, Vec<Instr>, Option<Vec<Instr>>)>,
     ws!(tuple!(
         first!(expr),
-        delimited!(
-            tag!("("),
-                preceded!(tag!("then"), first!(instr_list)),
-            tag!(")")
-        ),
+        delimited!(tag!("("), preceded!(tag!("then"), first!(instr_list)), tag!(")")),
         opt!(delimited!(
             tag!("("),
-                preceded!(tag!("else"), first!(instr_list)),
+            preceded!(tag!("else"), first!(instr_list)),
             tag!(")")
         ))
     ))

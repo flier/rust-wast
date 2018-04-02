@@ -61,7 +61,7 @@ named_args!(
                 ctxt.typedefs.insert(name, type_ref);
             }
         }} |
-        apply!(global, ctxt) => { |(bind, global)| {
+        global => { |(bind, global)| {
             trace!("global {:?} = {:?}", bind, global);
 
             let global_ref = ctxt.globals.get_or_insert(global);
@@ -70,7 +70,7 @@ named_args!(
                 ctxt.global_names.insert(name, global_ref);
             }
         }} |
-        apply!(table, ctxt) => { |(bind, table)| {
+        table => { |(bind, table)| {
             trace!("table {:?} = {:?}", bind, table);
 
             let table_ref = ctxt.tables.get_or_insert(table);
@@ -79,12 +79,12 @@ named_args!(
                 ctxt.table_names.insert(name, table_ref);
             }
         }} |
-        apply!(data, ctxt) => { |data| {
+        data => { |data| {
             trace!("data {:?}", data);
 
             ctxt.data.get_or_insert(data);
         }} |
-        apply!(elem, ctxt) => { |elem| {
+        elem => { |elem| {
             trace!("elem {:?}", elem);
 
             ctxt.elems.get_or_insert(elem);
@@ -154,28 +154,28 @@ named!(
     ))
 );
 
-named_args!(
-    global<'a>(ctxt: &'a mut Context)<(Option<Var>, Global)>,
+named!(
+    global<(Option<Var>, Global)>,
     parsing!(
         Global,
         ws!(delimited!(
             tag!("("),
-            preceded!(first!(tag!("global")), pair!(opt!(first!(var)), first!(apply!(global_fields, ctxt)))),
+            preceded!(first!(tag!("global")), pair!(opt!(first!(var)), first!(global_fields))),
             tag!(")")
         ))
     )
 );
 
-named_args!(
-    global_fields<'a>(ctxt: &'a mut Context)<Global>,
+named!(
+    global_fields<Global>,
     alt!(
-        pair!(first!(global_type), apply!(init_expr, ctxt)) => {
+        pair!(first!(global_type), first!(init_expr)) => {
             |(global_type, init_expr)| Global { global_type, init_expr: init_expr }
         } |
         pair!(first!(inline_import), first!(global_type)) => {
             |((module_name, item_name), global_type)| Global { global_type, init_expr: InitExpr::new(vec![]) }
         } |
-        pair!(first!(inline_export), first!(apply!(global_fields, ctxt))) => {
+        pair!(first!(inline_export), first!(global_fields)) => {
             |(export_name, global)| global
         }
     )
@@ -216,23 +216,23 @@ named!(
     ))
 );
 
-named_args!(
-    table<'a>(ctxt: &'a mut Context)<(Option<Var>, Table)>,
+named!(
+    table<(Option<Var>, Table)>,
     ws!(delimited!(
         tag!("("),
-        preceded!(first!(tag!("table")), pair!(opt!(first!(var)), first!(apply!(table_fields, ctxt)))),
+        preceded!(first!(tag!("table")), pair!(opt!(first!(var)), first!(table_fields))),
         tag!(")")
     ))
 );
 
-named_args!(
-    table_fields<'a>(ctxt: &'a mut Context)<Table>,
+named!(
+    table_fields<Table>,
     alt!(
         first!(table_type) => { |table_type| Table { table_type, elements: vec![] } } |
         pair!(first!(inline_import), first!(table_type)) => {
             |((module_name, item_name), table_type)| Table { table_type, elements: vec![] }
         } |
-        pair!(first!(inline_export), first!(apply!(table_fields, ctxt))) => {
+        pair!(first!(inline_export), first!(table_fields)) => {
             |(export_name, table_def)| table_def
         } |
         preceded!(
@@ -251,8 +251,8 @@ named_args!(
     )
 );
 
-named_args!(
-    elem<'a>(ctxt: &'a mut Context)<Elem>,
+named!(
+    elem<Elem>,
     parsing!(Elem,
         map!(ws!(delimited!(
             tag!("("),
@@ -260,7 +260,7 @@ named_args!(
                 first!(tag!("elem")),
                 tuple!(
                     opt!(first!(var)),
-                    alt_complete!(first!(apply!(offset, ctxt)) | first!(apply!(init_expr, ctxt))),
+                    alt_complete!(first!(offset) | first!(init_expr)),
                     var_list
                 )
             ),
@@ -275,15 +275,15 @@ named_args!(
     )
 );
 
-named_args!(
-    data<'a>(ctxt: &'a mut Context)<Data>,
+named!(
+    data<Data>,
     parsing!(Data,
         dbg_dmp!(map!(ws!(delimited!(
             tag!("("),
             preceded!(first!(tag!("data")),
                 tuple!(
                     opt!(first!(var)),
-                    alt_complete!(first!(apply!(offset, ctxt)) | first!(apply!(init_expr, ctxt))),
+                    alt_complete!(first!(offset) | first!(init_expr)),
                     string_list
                 )
             ),
@@ -301,11 +301,11 @@ named_args!(
     )
 );
 
-named_args!(
-    offset<'a>(ctxt: &'a mut Context)<InitExpr>,
+named!(
+    offset<InitExpr>,
     ws!(delimited!(
         tag!("("),
-        preceded!(first!(tag!("offset")), first!(apply!(init_expr, ctxt))),
+        preceded!(first!(tag!("offset")), first!(init_expr)),
         tag!(")")
     ))
 );
@@ -585,9 +585,7 @@ mod tests {
         ];
 
         for (code, ref value) in tests {
-            let mut ctxt = Context::default();
-
-            let res = data(code, &mut ctxt);
+            let res = data(code);
 
             trace_parse_error!(code, res);
 
@@ -701,9 +699,7 @@ mod tests {
         ];
 
         for (code, ref value) in tests {
-            let mut ctxt = Context::default();
-
-            let res = elem(code, &mut ctxt);
+            let res = elem(code);
 
             trace_parse_error!(code, res);
 

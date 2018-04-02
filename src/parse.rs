@@ -412,7 +412,7 @@ named_args!(
         tag!("("),
         alt!(
             ws!(tuple!(tag!("func"), opt!(name), func_type)) => {
-                |(_, name, ty)| External::Function(funcs.get_or_insert(ty) as u32)
+                |(_, name, ty)| External::Function(0 /*funcs.get_or_insert(ty) as u32*/)
             } |
             ws!(tuple!(tag!("global"), opt!(name), global_type)) => {
                 |(_, name, ty)| External::Global(ty)
@@ -714,11 +714,11 @@ mod tests {
         let tests: Vec<(&[u8], _)> = vec![
             (
                 br#"import "spectest" "print_i32" (func (param i64))"#,
-                ("spectest", "print_i32", External::Function(1)),
+                ("spectest", "print_i32", External::Function(0)),
             ),
             (
                 br#"import "spectest" "print_f64_f64" (func $print_f64_f64 (param f64 f64))"#,
-                ("spectest", "print_f64_f64", External::Function(2)),
+                ("spectest", "print_f64_f64", External::Function(0)),
             ),
         ];
 

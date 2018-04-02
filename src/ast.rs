@@ -1,15 +1,15 @@
-use std::mem;
 use std::collections::HashMap;
+use std::mem;
 
 use failure::{err_msg, Error};
 use itertools;
 use parity_wasm::builder::{TableDefinition, TableEntryDefinition};
 use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, GlobalEntry, GlobalType, InitExpr, NameMap,
-                            Opcode, TableType, Type, TypeSection, ValueType};
+                            Opcode, TableType, TypeSection, ValueType};
 
 use func::func_type;
 use ops::{align, binary, compare, convert, mem_size, offset, sign, test, unary};
-use parse::{value_type, var, FunctionTypeExt, IndexSpace, Var, float32, float64, int32, int64};
+use parse::{value_type, var, Var, float32, float64, int32, int64};
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
@@ -140,7 +140,7 @@ pub enum Instr {
     /// call function
     Call(Var),
     /// call function through table
-    CallIndirect(Var),
+    CallIndirect(Option<Var>, Option<FunctionType>),
     /// forget a value
     Drop,
     /// branchless conditional
@@ -372,16 +372,14 @@ named!(
     ))
 );
 
-named_args!(
-    pub instr_list<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
-    map!(ws!(many0!(apply!(instr, ctxt))), |instrs| itertools::flatten(instrs).collect())
+named!(
+    pub instr_list<Vec<Instr>>,
+    map!(ws!(many0!(first!(instr))), |instrs| itertools::flatten(instrs).collect())
 );
 
-named_args!(pub const_expr<'a>(ctxt: &'a mut Context)<Vec<Instr>>, apply!(instr_list, ctxt));
-
-named_args!(
-    pub init_expr<'a>(ctxt: &'a mut Context)<InitExpr>,
-    map_res!(apply!(const_expr, ctxt), |instrs: Vec<Instr>| -> Result<InitExpr, Error> {
+named!(
+    pub init_expr<InitExpr>,
+    map_res!(instr_list, |instrs: Vec<Instr>| -> Result<InitExpr, Error> {
         let opcodes = instrs
             .into_iter()
             .map(|instr| match instr {
@@ -394,14 +392,15 @@ named_args!(
     })
 );
 
-named_args!(
-    instr<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
-    parsing!(Instr,
+named!(
+    instr<Vec<Instr>>,
+    parsing!(
+        Instr,
         ws!(alt!(
             plain_instr => { |instr| vec![instr] } |
-            apply!(call_instr, ctxt) => { |instr| vec![instr] } |
-            apply!(block_instr, ctxt) => { |instr| vec![instr] } |
-            apply!(expr, ctxt)
+            call_instr => { |instr| vec![instr] } |
+            block_instr => { |instr| vec![instr] } |
+            expr
         ))
     )
 );
@@ -441,38 +440,18 @@ named!(
     )
 );
 
-named_args!(
-    call_instr<'a>(ctxt: &'a mut Context)<Instr>,
-    ws!(preceded!(tag!("call_indirect"), apply!(call_instr_type, ctxt)))
+named!(
+    call_instr<Instr>,
+    preceded!(tag!("call_indirect"), first!(call_instr_type))
 );
 
-named_args!(
-    call_instr_type<'a>(ctxt: &'a mut Context)<Instr>,
+named!(
+    call_instr_type<Instr>,
     alt!(
-        map!(var, |var| Instr::CallIndirect(var)) |
-        map_res!(
-            ws!(pair!(opt!(type_use), func_type)),
-            |(type_use, func_type): (Option<Var>, FunctionType)| {
-                trace!("call_indirect (type {:?}) {:?}", type_use, func_type);
-
-                match type_use {
-                    Some(var) => {
-                        if !func_type.is_empty() &&
-                           ctxt.types.types()
-                                .get(var.resolve_ref(ctxt.funcs.names())? as usize)
-                                .map_or(true, |ty| *ty == Type::Function(func_type))
-                        {
-                            bail!("inline function type does not match explicit type")
-                        }
-
-                        Ok(Instr::CallIndirect(var))
-                    },
-                    None => {
-                        Ok(Instr::CallIndirect(Var::Index(ctxt.types.get_or_insert(func_type) as u32)))
-                    }
-                }
-            }
-        )
+        var => { |var| Instr::CallIndirect(Some(var),  None) } |
+        pair!(opt!(first!(type_use)), first!(func_type)) => {
+            |(type_use, func_type)| Instr::CallIndirect(type_use, func_type)
+        }
     )
 );
 
@@ -483,31 +462,36 @@ named!(
 
 // named!(call_instr_instr<Instr>, tag!(""));
 
-named_args!(
-    block_instr<'a>(ctxt: &'a mut Context)<Instr>,
-    parsing!(BlockInstr,
+named!(
+    block_instr<Instr>,
+    parsing!(
+        BlockInstr,
         ws!(alt_complete!(
-            tuple!(tag!("block"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
+            tuple!(tag!("block"), opt!(first!(var)), first!(block), tag!("end"), opt!(first!(var))) => {
                 |(_, _, (block_type, instrs), _, _)| Instr::Block(block_type, instrs)
             } |
-            tuple!(tag!("loop"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
+            tuple!(tag!("loop"), opt!(first!(var)), first!(block), tag!("end"), opt!(first!(var))) => {
                 |(_, _, (block_type, instrs), _, _)| Instr::Loop(block_type, instrs)
             } |
-            tuple!(tag!("if"), opt!(var), apply!(block, ctxt), tag!("end"), opt!(var)) => {
+            tuple!(tag!("if"), opt!(first!(var)), first!(block), tag!("end"), opt!(first!(var))) => {
                 |(_, _, (block_type, then), _, _)| Instr::If(block_type, then, vec![])
             } |
-            tuple!(tag!("if"), opt!(var), apply!(block, ctxt), tag!("else"), opt!(var), apply!(instr_list, ctxt), tag!("end"), opt!(var)) => {
+            tuple!(
+                tag!("if"), opt!(first!(var)), first!(block),
+                tag!("else"), opt!(first!(var)), instr_list,
+                tag!("end"), opt!(first!(var))
+            ) => {
                 |(_, _, (block_type, then), _, _, else_, _, _)| Instr::If(block_type, then, else_)
             }
         ))
     )
 );
 
-named_args!(
-    block<'a>(ctxt: &'a mut Context)<(BlockType, Vec<Instr>)>,
+named!(
+    block<(BlockType, Vec<Instr>)>,
     parsing!(Block,
         map!(
-            pair!(opt!(block_type), apply!(instr_list, ctxt)),
+            pair!(opt!(first!(block_type)), first!(instr_list)),
             |(block_type, instrs)| (
                 block_type.map_or(BlockType::NoResult, BlockType::Value),
                 instrs
@@ -521,11 +505,11 @@ named!(
     ws!(delimited!(tag!("("), preceded!(tag!("result"), value_type), tag!(")")))
 );
 
-named_args!(expr_list<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
-    map!(ws!(many0!(apply!(expr, ctxt))), |instrs| itertools::flatten(instrs).collect())
+named!(expr_list<Vec<Instr>>,
+    map!(ws!(many0!(first!(expr))), |instrs| itertools::flatten(instrs).collect())
 );
 
-named_args!(expr<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
+named!(expr<Vec<Instr>>,
     parsing!(Expr,
         ws!(delimited!(
             tag!("("),
@@ -533,16 +517,16 @@ named_args!(expr<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
                 plain_instr => {
                     |instr| vec![instr]
                 } |
-                apply!(call_instr, ctxt) => {
+                call_instr => {
                     |instr| vec![instr]
                 } |
-                tuple!(tag!("block"), opt!(var), apply!(block, ctxt)) => {
+                tuple!(tag!("block"), opt!(first!(var)), first!(block)) => {
                     |(_, label, (block_type, instrs))| vec![Instr::Block(block_type, instrs)]
                 } |
-                tuple!(tag!("loop"), opt!(var), apply!(block, ctxt)) => {
+                tuple!(tag!("loop"), opt!(first!(var)), first!(block)) => {
                     |(_, label, (block_type, instrs))| vec![Instr::Loop(block_type, instrs)]
                 } |
-                tuple!(tag!("if"), opt!(var), apply!(if_block, ctxt)) => {
+                tuple!(tag!("if"), opt!(first!(var)), first!(if_block)) => {
                     |(_, label, (mut cond, block_type, then, else_))| {
                         let mut instrs = vec![];
 
@@ -558,11 +542,11 @@ named_args!(expr<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
     )
 );
 
-named_args!(
-    if_block<'a>(ctxt: &'a mut Context)<(Vec<Instr>, BlockType, Vec<Instr>, Vec<Instr>)>,
+named!(
+    if_block<(Vec<Instr>, BlockType, Vec<Instr>, Vec<Instr>)>,
     parsing!(IfBlock,
         map!(
-            pair!(opt!(block_type), apply!(if_, ctxt)),
+            pair!(opt!(block_type), first!(if_)),
             |(block_type, (cond, then, else_))| (
                 cond,
                 block_type.map_or(BlockType::NoResult, BlockType::Value),
@@ -573,18 +557,18 @@ named_args!(
     )
 );
 
-named_args!(
-    if_<'a>(ctxt: &'a mut Context)<(Vec<Instr>, Vec<Instr>, Option<Vec<Instr>>)>,
+named!(
+    if_<(Vec<Instr>, Vec<Instr>, Option<Vec<Instr>>)>,
     ws!(tuple!(
-        apply!(expr, ctxt),
+        first!(expr),
         delimited!(
             tag!("("),
-                preceded!(tag!("then"), apply!(instr_list, ctxt)),
+                preceded!(tag!("then"), first!(instr_list)),
             tag!(")")
         ),
         opt!(delimited!(
             tag!("("),
-                preceded!(tag!("else"), apply!(instr_list, ctxt)),
+                preceded!(tag!("else"), first!(instr_list)),
             tag!(")")
         ))
     ))
@@ -660,43 +644,40 @@ mod tests {
     #[test]
     fn parse_call_instr() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"call_indirect 123", Done(&[][..], CallIndirect(Var::Index(123)))),
+            (
+                b"call_indirect 123",
+                Done(&[][..], CallIndirect(Some(Var::Index(123)), None)),
+            ),
             (
                 b"call_indirect $hello",
-                Done(&[][..], CallIndirect(Var::Name("hello".to_owned()))),
+                Done(&[][..], CallIndirect(Some(Var::Name("hello".to_owned())), None)),
             ),
             (
                 b"call_indirect (type $hello)",
-                Done(&[][..], CallIndirect(Var::Name("hello".to_owned()))),
+                Done(&[][..], CallIndirect(Some(Var::Name("hello".to_owned())), None)),
             ),
-            (b"call_indirect (param i32)", Done(&[][..], CallIndirect(Var::Index(0)))),
-            (b"call_indirect (param i64)", Done(&[][..], CallIndirect(Var::Index(1)))),
+            (
+                b"call_indirect (param i32)",
+                Done(&[][..], CallIndirect(None, Some(FunctionType::new(vec![I32], None)))),
+            ),
+            (
+                b"call_indirect (param i64)",
+                Done(&[][..], CallIndirect(None, Some(FunctionType::new(vec![I64], None)))),
+            ),
             (
                 b"call_indirect (param i32) (param i64) (result f32)",
-                Done(&[][..], CallIndirect(Var::Index(2))),
+                Done(
+                    &[][..],
+                    CallIndirect(None, Some(FunctionType::new(vec![I32, I64], Some(F32)))),
+                ),
             ),
         ];
 
-        let mut ctxt = Context::default();
-
-        ctxt.types
-            .types_mut()
-            .push(Type::Function(FunctionType::new(vec![I32], None)));
-
         for &(code, ref result) in tests.iter() {
-            assert_eq!(call_instr(code, &mut ctxt), *result, "parse instr: {}", unsafe {
+            assert_eq!(call_instr(code), *result, "parse instr: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }
-
-        assert_eq!(
-            ctxt.types.types(),
-            &[
-                Type::Function(FunctionType::new(vec![I32], None)),
-                Type::Function(FunctionType::new(vec![I64], None)),
-                Type::Function(FunctionType::new(vec![I32, I64], Some(F32))),
-            ]
-        );
     }
 
     #[test]
@@ -733,10 +714,8 @@ mod tests {
             ),
         ];
 
-        let mut ctxt = Context::default();
-
         for &(code, ref result) in tests.iter() {
-            assert_eq!(block_instr(code, &mut ctxt), *result, "parse instr: {}", unsafe {
+            assert_eq!(block_instr(code), *result, "parse instr: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }
@@ -997,10 +976,8 @@ mod tests {
             ),
         ];
 
-        let mut ctxt = Context::default();
-
         for &(code, ref result) in tests.iter() {
-            assert_eq!(expr(code, &mut ctxt), *result, "parse expr: {}", unsafe {
+            assert_eq!(expr(code), *result, "parse expr: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

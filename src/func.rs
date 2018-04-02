@@ -23,14 +23,19 @@ named_args!(
 );
 
 named!(
-    pub func_type<FunctionType>,
+    pub func_type<Option<FunctionType>>,
     parsing!(FuncType,
         map!(
-            ws!(pair!(many0!(param), opt!(complete!(result)))),
-            |(params, result_type)| FunctionType::new(
-                params.into_iter().flat_map(|param| param).collect(),
-                result_type.unwrap_or_default()
-            )
+            pair!(many0!(first!(param)), opt!(complete!(first!(result)))),
+            |(params, result_type)|
+                if params.is_empty() && result_type.is_none() {
+                    None
+                } else {
+                    Some(FunctionType::new(
+                        params.into_iter().flat_map(|param| param).collect(),
+                        result_type.unwrap_or_default()
+                    ))
+                }
         )
     )
 );
@@ -80,7 +85,7 @@ named!(
     pub result<Option<ValueType>>,
     ws!(delimited!(
         tag!("("),
-        preceded!(tag!("result"), opt!(value_type)),
+        preceded!(tag!("result"), opt!(first!(value_type))),
         tag!(")")
     ))
 );

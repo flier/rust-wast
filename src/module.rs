@@ -1,11 +1,12 @@
-use nom::IResult;
 use failure::Error;
+use nom::IResult;
 
 use parity_wasm::builder::{signature, ModuleBuilder};
-use parity_wasm::elements::{FunctionType, GlobalType, Module, TableType, Type, ValueType};
+use parity_wasm::elements::{FunctionType, GlobalType, InitExpr, Module, TableType, Type, ValueType};
 
-use ast::{instr_list, Global, Table};
-use parse::{elem_type, string, table_type, value_type, value_type_list, var, var_list, Context, IndexSpace, Var};
+use ast::{init_expr, Data, Global, Table};
+use parse::{elem_type, string, string_list, table_type, value_type, value_type_list, var, var_list, Context,
+            IndexSpace, Var};
 
 fn module(input: &[u8]) -> IResult<&[u8], Module> {
     let mut ctxt = Context::default();
@@ -78,6 +79,11 @@ named_args!(
             if let Some(Var::Name(name)) = bind {
                 ctxt.table_names.insert(name, table_ref);
             }
+        }} |
+        apply!(data, ctxt) => { |data| {
+            trace!("data {:?}", data);
+
+            let data_ref = ctxt.data.get_or_insert(data);
         }}
     )
 );
@@ -159,11 +165,11 @@ named_args!(
 named_args!(
     global_fields<'a>(ctxt: &'a mut Context)<Global>,
     alt!(
-        pair!(first!(global_type), apply!(instr_list, ctxt)) => {
-            |(global_type, init_expr)| Global { global_type, init_expr }
+        pair!(first!(global_type), apply!(init_expr, ctxt)) => {
+            |(global_type, init_expr)| Global { global_type, init_expr: init_expr }
         } |
         pair!(first!(inline_import), first!(global_type)) => {
-            |((module_name, item_name), global_type)| Global { global_type, init_expr: vec![] }
+            |((module_name, item_name), global_type)| Global { global_type, init_expr: InitExpr::new(vec![]) }
         } |
         pair!(first!(inline_export), first!(apply!(global_fields, ctxt))) => {
             |(export_name, global)| global
@@ -239,6 +245,41 @@ named_args!(
             }
         }
     )
+);
+
+named_args!(
+    data<'a>(ctxt: &'a mut Context)<Data>,
+    parsing!(Data,
+        dbg_dmp!(map!(ws!(delimited!(
+            tag!("("),
+            preceded!(first!(tag!("data")),
+                tuple!(
+                    opt!(first!(var)),
+                    alt_complete!(first!(apply!(offset, ctxt)) | first!(apply!(init_expr, ctxt))),
+                    string_list
+                )
+            ),
+            tag!(")")
+        )), |(mem_index, offset, strs)| {
+            Data {
+                mem_index: mem_index.unwrap_or(Var::Index(0)),
+                offset,
+                value: strs.into_iter().fold(vec![], |mut value, s| {
+                    value.extend_from_slice(s.as_bytes());
+                    value
+                }),
+            }
+        }))
+    )
+);
+
+named_args!(
+    offset<'a>(ctxt: &'a mut Context)<InitExpr>,
+    ws!(delimited!(
+        tag!("("),
+        preceded!(first!(tag!("offset")), first!(apply!(init_expr, ctxt))),
+        tag!(")")
+    ))
 );
 
 #[cfg(test)]
@@ -409,6 +450,122 @@ mod tests {
                 "parse global: {}",
                 unsafe { str::from_utf8_unchecked(code) },
             );
+        }
+    }
+
+    #[test]
+    fn parse_data() {
+        let _ = pretty_env_logger::try_init();
+
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                br#"(data (i32.const 0))"#,
+                Data {
+                    mem_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: vec![],
+                },
+            ),
+            (
+                br#"(data (i32.const 1) "a" "" "bcd")"#,
+                Data {
+                    mem_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(1)]),
+                    value: b"abcd".to_vec(),
+                },
+            ),
+            (
+                br#"(data (offset (i32.const 0)))"#,
+                Data {
+                    mem_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: vec![],
+                },
+            ),
+            (
+                br#"(data (offset (i32.const 0)) "" "a" "bc" "")"#,
+                Data {
+                    mem_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: b"abc".to_vec(),
+                },
+            ),
+            (
+                br#"(data 0 (i32.const 0))"#,
+                Data {
+                    mem_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: vec![],
+                },
+            ),
+            (
+                br#"(data 0x0 (i32.const 1) "a" "" "bcd")"#,
+                Data {
+                    mem_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(1)]),
+                    value: b"abcd".to_vec(),
+                },
+            ),
+            (
+                br#"(data 0x000 (offset (i32.const 0)))"#,
+                Data {
+                    mem_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: vec![],
+                },
+            ),
+            (
+                br#"(data 0 (offset (i32.const 0)) "" "a" "bc" "")"#,
+                Data {
+                    mem_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: b"abc".to_vec(),
+                },
+            ),
+            (
+                br#"(data $m (i32.const 0))"#,
+                Data {
+                    mem_index: Var::Name("m".to_owned()),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: vec![],
+                },
+            ),
+            (
+                br#"(data $m (i32.const 1) "a" "" "bcd")"#,
+                Data {
+                    mem_index: Var::Name("m".to_owned()),
+                    offset: InitExpr::new(vec![I32Const(1)]),
+                    value: b"abcd".to_vec(),
+                },
+            ),
+            (
+                br#"(data $m (offset (i32.const 0)))"#,
+                Data {
+                    mem_index: Var::Name("m".to_owned()),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: vec![],
+                },
+            ),
+            (
+                br#"(data $m (offset (i32.const 0)) "" "a" "bc" "")"#,
+                Data {
+                    mem_index: Var::Name("m".to_owned()),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    value: b"abc".to_vec(),
+                },
+            ),
+        ];
+
+        for (code, ref value) in tests {
+            let mut ctxt = Context::default();
+
+            let res = data(code, &mut ctxt);
+
+            trace_parse_error!(code, res);
+
+            assert_eq!(res, IResult::Done(&[][..], value.clone()), "parse data: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
         }
     }
 }

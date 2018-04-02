@@ -8,7 +8,7 @@ use nom::ErrorKind::*;
 use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, FunctionType, GlobalType, ImportEntry,
                             Internal, MemoryType, NameMap, TableType, Type, TypeSection, ValueType};
 
-use ast::{Global, Table};
+use ast::{Data, Global, Table};
 use errors::WastError;
 use func::func_type;
 
@@ -18,6 +18,8 @@ pub struct Context {
     pub typedefs: HashMap<String, usize>,
     pub tables: Vec<Table>,
     pub table_names: HashMap<String, usize>,
+    pub data: Vec<Data>,
+    pub data_names: HashMap<String, usize>,
     pub memories: NameMap,
     pub funcs: FunctionNameSection,
     pub locals: NameMap,
@@ -228,51 +230,6 @@ named!(
     )
 );
 
-const SYMBOL: &[u8] = b"_.+-*/\\^~=<>!?@#$%&|:'`";
-
-/// string: "(<char> | \n | \t | \\ | \' | \" | \<hex><hex> | \u{<hex>+})*"
-named!(
-    pub string<String>,
-    parsing!(Str,
-        delimited!(
-            tag!("\""),
-            map!(
-                escaped_transform!(string_char, '\\',
-                    alt!(
-                        tag!("r") => { |_| &b"\r"[..] } |
-                        tag!("n") => { |_| &b"\n"[..] } |
-                        tag!("t") => { |_| &b"\t"[..] } |
-                        tag!("\\") => { |_| &b"\\"[..] } |
-                        tag!("'") => { |_| &b"'"[..] } |
-                        tag!("\"") => { |_| &b"\""[..] }
-                    )
-                ),
-                |s| String::from_utf8_lossy(&s).into_owned()
-            ),
-            tag!("\"")
-        )
-    )
-);
-
-fn string_char(input: &[u8]) -> IResult<&[u8], &[u8], u32> {
-    match input.iter().position(|&b| b == b'\\' || b == b'\"') {
-        None => IResult::Done(&input[input.len()..], input),
-        Some(index) if index > 0 => IResult::Done(&input[index..], &input[..index]),
-        _ => IResult::Error(error_position!(Tag, input)),
-    }
-}
-
-#[cfg_attr(rustfmt, rustfmt_skip)]
-named!(
-    comment,
-    parsing!(Comment,
-        alt!(
-            preceded!(tag!("(;"), take_until_and_consume!(";)")) |
-            preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
-        )
-    )
-);
-
 #[macro_export]
 macro_rules! first(
     ($input:expr, $submacro:ident!($($arguments:tt)*)) => (
@@ -291,6 +248,56 @@ macro_rules! first(
 );
 
 named!(pub skip, recognize!(many0!(alt!(comment | whitespace))));
+
+const SYMBOL: &[u8] = b"_.+-*/\\^~=<>!?@#$%&|:'`";
+
+/// string: "(<char> | \n | \t | \\ | \' | \" | \<hex><hex> | \u{<hex>+})*"
+named!(
+    pub string<String>,
+    parsing!(Str,
+        alt_complete!(
+            tag!("\"\"") => { |_| String::default() } |
+            delimited!(
+                tag!("\""),
+                map!(
+                    escaped_transform!(string_char, '\\',
+                        alt!(
+                            tag!("r") => { |_| &b"\r"[..] } |
+                            tag!("n") => { |_| &b"\n"[..] } |
+                            tag!("t") => { |_| &b"\t"[..] } |
+                            tag!("\\") => { |_| &b"\\"[..] } |
+                            tag!("'") => { |_| &b"'"[..] } |
+                            tag!("\"") => { |_| &b"\""[..] }
+                        )
+                    ),
+                    |s| String::from_utf8_lossy(&s).into_owned()
+                ),
+                tag!("\"")
+            )
+        )
+    )
+);
+
+fn string_char(input: &[u8]) -> IResult<&[u8], &[u8], u32> {
+    match input.iter().position(|&b| b == b'\\' || b == b'\"') {
+        None => IResult::Done(&input[input.len()..], input),
+        Some(index) if index > 0 => IResult::Done(&input[index..], &input[..index]),
+        _ => IResult::Error(error_position!(Tag, input)),
+    }
+}
+
+named!(pub string_list<Vec<String>>, many0!(first!(string)));
+
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    comment,
+    parsing!(Comment,
+        alt!(
+            preceded!(tag!("(;"), take_until_and_consume!(";)")) |
+            preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
+        )
+    )
+);
 
 named!(pub whitespace, is_a!(" \t\n\r"));
 
@@ -389,11 +396,7 @@ named!(
 
 named!(
     mut_value_type<ValueType>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(tag!("mut"), value_type),
-        tag!(")")
-    ))
+    ws!(delimited!(tag!("("), preceded!(tag!("mut"), value_type), tag!(")")))
 );
 
 named!(pub elem_type, tag!("anyfunc"));
@@ -406,16 +409,11 @@ named!(
     )
 );
 
-named!(
-    limits<(u32, Option<u32>)>,
-    pair!(first!(nat32), opt!(first!(nat32)))
-);
+named!(limits<(u32, Option<u32>)>, pair!(first!(nat32), opt!(first!(nat32))));
 
 named!(
     memory_type<MemoryType>,
-    map!(ws!(pair!(nat32, opt!(nat32))), |(min, max)| {
-        MemoryType::new(min, max)
-    })
+    map!(ws!(pair!(nat32, opt!(nat32))), |(min, max)| MemoryType::new(min, max))
 );
 
 named_args!(
@@ -538,11 +536,7 @@ mod tests {
             (b"0x123_456_abc", Done(&b""[..], 0x123_456_abc)),
             (
                 b"",
-                Error(NodePosition(
-                    Custom(Nat as u32),
-                    &[][..],
-                    vec![Position(Alt, &[][..])],
-                )),
+                Error(NodePosition(Custom(Nat as u32), &[][..], vec![Position(Alt, &[][..])])),
             ),
         ];
 
@@ -558,10 +552,7 @@ mod tests {
         let tests: Vec<(&[u8], _)> = vec![
             (b"+123", Done(&[][..], 123)),
             (b"-123_456 abc", Done(&b" abc"[..], -123_456)),
-            (
-                b"0x1234_5678_90ab_cdef",
-                Done(&b""[..], 0x1234_5678_90ab_cdef),
-            ),
+            (b"0x1234_5678_90ab_cdef", Done(&b""[..], 0x1234_5678_90ab_cdef)),
             (
                 b"",
                 Error(NodePosition(
@@ -651,12 +642,16 @@ mod tests {
     #[test]
     fn parse_string() {
         let tests: Vec<(&[u8], _)> = vec![
+            (b"\"\"", Done(&b""[..], "".to_owned())),
             (b"\"hello world\"", Done(&b""[..], "hello world".to_owned())),
             (
                 b"\"hello \\r\\n\\t\\\\\\'\\\"world\"",
                 Done(&b""[..], "hello \r\n\t\\'\"world".to_owned()),
             ),
-            (b"", Incomplete(Needed::Size(1))),
+            (
+                b"",
+                Error(NodePosition(Custom(Str as u32), &[][..], vec![Position(Alt, &[][..])])),
+            ),
         ];
 
         for (code, ref result) in tests {
@@ -670,10 +665,7 @@ mod tests {
     fn parse_var() {
         let tests: Vec<(&[u8], _)> = vec![
             (b"0", Done(&b""[..], super::Var::Index(0))),
-            (
-                b"$done",
-                Done(&b""[..], super::Var::Name("done".to_owned())),
-            ),
+            (b"$done", Done(&b""[..], super::Var::Name("done".to_owned()))),
         ];
 
         for (code, ref result) in tests {
@@ -685,10 +677,7 @@ mod tests {
 
     #[test]
     fn parse_global_type() {
-        let tests: Vec<(&[u8], _, _)> = vec![
-            (b"i32", ValueType::I32, false),
-            (b"(mut i64)", ValueType::I64, true),
-        ];
+        let tests: Vec<(&[u8], _, _)> = vec![(b"i32", ValueType::I32, false), (b"(mut i64)", ValueType::I64, true)];
 
         for (code, value_type, is_mutable) in tests {
             let (remaining, global_type) = global_type(code).unwrap();
@@ -728,10 +717,7 @@ mod tests {
             (b";; foo\r\nbar", Done(&b"bar"[..], &b" foo\r\n"[..])),
             (b";; foo;;bar", Done(&b""[..], &b" foo;;bar"[..])),
             (b"(;foobar;)", Done(&b""[..], &b"foobar"[..])),
-            (
-                b"(;foo(;foobar;)bar;)",
-                Done(&b"bar;)"[..], &b"foo(;foobar"[..]),
-            ),
+            (b"(;foo(;foobar;)bar;)", Done(&b"bar;)"[..], &b"foo(;foobar"[..])),
         ];
 
         for (code, result) in tests {
@@ -778,10 +764,7 @@ mod tests {
             },);
             assert_eq!(import.module(), module);
             assert_eq!(import.field(), field);
-            assert_eq!(
-                format!("{:?}", import.external()),
-                format!("{:?}", external)
-            );
+            assert_eq!(format!("{:?}", import.external()), format!("{:?}", external));
         }
     }
 }

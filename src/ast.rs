@@ -13,28 +13,20 @@ use parse::{value_type, var, Context, FunctionTypeExt, IndexSpace, Var, float32,
 #[derive(Clone, Debug)]
 pub struct Global {
     pub global_type: GlobalType,
-    pub init_expr: Vec<Instr>,
+    pub init_expr: InitExpr,
 }
 
 impl PartialEq for Global {
     fn eq(&self, other: &Self) -> bool {
         self.global_type.content_type() == other.global_type.content_type()
             && self.global_type.is_mutable() == other.global_type.is_mutable()
-            && self.init_expr == other.init_expr
+            && self.init_expr.code() == other.init_expr.code()
     }
 }
 
 impl Global {
     pub fn eval(&self, ctxt: &Context) -> Result<GlobalEntry, Error> {
-        let opcodes = self.init_expr
-            .iter()
-            .map(|instr| match *instr {
-                Instr::Const(ref constant) => Ok(constant.clone().into()),
-                _ => bail!("constant expression required"),
-            })
-            .collect::<Result<Vec<Opcode>, Error>>()?;
-
-        Ok(GlobalEntry::new(self.global_type.clone(), InitExpr::new(opcodes)))
+        Ok(GlobalEntry::new(self.global_type.clone(), self.init_expr.clone()))
     }
 }
 
@@ -78,6 +70,19 @@ impl Table {
             max: self.table_type.limits().maximum(),
             elements,
         })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Data {
+    pub mem_index: Var,
+    pub offset: InitExpr,
+    pub value: Vec<u8>,
+}
+
+impl PartialEq for Data {
+    fn eq(&self, other: &Self) -> bool {
+        self.mem_index == other.mem_index && self.offset.code() == other.offset.code() && self.value == other.value
     }
 }
 
@@ -339,6 +344,23 @@ named!(
 named_args!(
     pub instr_list<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
     map!(ws!(many0!(apply!(instr, ctxt))), |instrs| itertools::flatten(instrs).collect())
+);
+
+named_args!(pub const_expr<'a>(ctxt: &'a mut Context)<Vec<Instr>>, apply!(instr_list, ctxt));
+
+named_args!(
+    pub init_expr<'a>(ctxt: &'a mut Context)<InitExpr>,
+    map_res!(apply!(const_expr, ctxt), |instrs: Vec<Instr>| -> Result<InitExpr, Error> {
+        let opcodes = instrs
+            .into_iter()
+            .map(|instr| match instr {
+                Instr::Const(constant) => Ok(constant.into()),
+                _ => bail!("constant expression required"),
+            })
+            .collect::<Result<Vec<Opcode>, Error>>()?;
+
+        Ok(InitExpr::new(opcodes))
+    })
 );
 
 named_args!(

@@ -4,11 +4,10 @@ use std::usize;
 use parity_wasm::elements::NameMap;
 
 use failure::Error;
-use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, Opcode, Type,
-                            TypeSection};
+use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, Opcode, Type, TypeSection};
 
-use parse::{int_type, name, value_type, var, Var, float32, float64, int32, int64, nat32};
 use func::{param, result};
+use parse::{int_type, name, value_type, var, Var, float32, float64, int32, int64, nat32};
 
 named_args!(
     opcode<'a>(labels: &'a NameMap,
@@ -72,11 +71,7 @@ named!(
 named!(
     loop_<Opcode>,
     map!(
-        ws!(tuple!(
-            tag!("loop"),
-            opt!(complete!(name)),
-            opt!(complete!(block_type))
-        )),
+        ws!(tuple!(tag!("loop"), opt!(complete!(name)), opt!(complete!(block_type)))),
         |(_, name, block_type)| Opcode::Loop(block_type.unwrap_or_else(|| BlockType::NoResult))
     )
 );
@@ -84,28 +79,19 @@ named!(
 named!(
     if_<Opcode>,
     map!(
-        ws!(tuple!(
-            tag!("if"),
-            opt!(complete!(name)),
-            opt!(complete!(block_type))
-        )),
+        ws!(tuple!(tag!("if"), opt!(complete!(name)), opt!(complete!(block_type)))),
         |(_, name, block_type)| Opcode::If(block_type.unwrap_or_else(|| BlockType::NoResult))
     )
 );
 
 named!(
     else_<Opcode>,
-    map!(
-        ws!(preceded!(tag!("else"), opt!(complete!(name)))),
-        |name| Opcode::Else
-    )
+    map!(ws!(preceded!(tag!("else"), opt!(complete!(name)))), |name| Opcode::Else)
 );
 
 named!(
     end<Opcode>,
-    map!(ws!(preceded!(tag!("end"), opt!(complete!(name)))), |name| {
-        Opcode::End
-    })
+    map!(ws!(preceded!(tag!("end"), opt!(complete!(name)))), |name| Opcode::End)
 );
 
 named!(
@@ -198,7 +184,11 @@ named_args!(
             if let Some(idx) = type_use {
                 Opcode::CallIndirect(idx, 0)
             } else if let Some(func_type) = func_type {
-                if let Some(idx) = signatures.types().iter().position(|ty| { Type::Function(func_type.clone()) == *ty }) {
+                let idx = signatures.types().iter().position(|ty| {
+                    Type::Function(func_type.clone()) == *ty
+                });
+
+                if let Some(idx) = idx {
                     Opcode::CallIndirect(idx as u32, 0)
                 } else {
                     let idx = signatures.types().len();
@@ -403,8 +393,8 @@ named!(
 named!(
     unop,
     alt!(
-        tag!("clz") | tag!("ctz") | tag!("popcnt") | tag!("abs") | tag!("neg") | tag!("sqrt")
-            | tag!("ceil") | tag!("floor") | tag!("trunc") | tag!("nearest")
+        tag!("clz") | tag!("ctz") | tag!("popcnt") | tag!("abs") | tag!("neg") | tag!("sqrt") | tag!("ceil")
+            | tag!("floor") | tag!("trunc") | tag!("nearest")
     )
 );
 
@@ -540,11 +530,11 @@ named!(
 mod tests {
     use std::str;
 
-    use pretty_env_logger;
-    use parity_wasm::elements::ValueType;
+    use nom::Err::*;
     use nom::ErrorKind::*;
     use nom::IResult::*;
-    use nom::Err::*;
+    use parity_wasm::elements::ValueType;
+    use pretty_env_logger;
 
     use super::*;
     use errors::Parsing::*;
@@ -580,10 +570,7 @@ mod tests {
     fn parse_block() {
         let tests: Vec<(&[u8], _)> = vec![
             (b"block", Done(&[][..], Opcode::Block(BlockType::NoResult))),
-            (
-                b"block $exit",
-                Done(&[][..], Opcode::Block(BlockType::NoResult)),
-            ),
+            (b"block $exit", Done(&[][..], Opcode::Block(BlockType::NoResult))),
             (
                 b"block (result i32)",
                 Done(&[][..], Opcode::Block(BlockType::Value(ValueType::I32))),
@@ -609,10 +596,7 @@ mod tests {
     fn parse_loop() {
         let tests: Vec<(&[u8], _)> = vec![
             (b"loop", Done(&[][..], Opcode::Loop(BlockType::NoResult))),
-            (
-                b"loop $exit",
-                Done(&[][..], Opcode::Loop(BlockType::NoResult)),
-            ),
+            (b"loop $exit", Done(&[][..], Opcode::Loop(BlockType::NoResult))),
             (
                 b"loop (result i32)",
                 Done(&[][..], Opcode::Loop(BlockType::Value(ValueType::I32))),
@@ -647,10 +631,7 @@ mod tests {
                 b"if $done (result i32)",
                 Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
             ),
-            (
-                b"if i32",
-                Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32))),
-            ),
+            (b"if i32", Done(&[][..], Opcode::If(BlockType::Value(ValueType::I32)))),
         ];
 
         for &(code, ref result) in tests.iter() {
@@ -725,14 +706,8 @@ mod tests {
     #[test]
     fn parse_br_table() {
         let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"br_table 0",
-                Done(&[][..], Opcode::BrTable(Box::new([]), 0)),
-            ),
-            (
-                b"br_table 0 0",
-                Done(&[][..], Opcode::BrTable(Box::new([0]), 0)),
-            ),
+            (b"br_table 0", Done(&[][..], Opcode::BrTable(Box::new([]), 0))),
+            (b"br_table 0 0", Done(&[][..], Opcode::BrTable(Box::new([0]), 0))),
             (
                 b"br_table 3 2 1 0 4",
                 Done(&[][..], Opcode::BrTable(Box::new([3, 2, 1, 0]), 4)),
@@ -741,12 +716,9 @@ mod tests {
         let labels = NameMap::default();
 
         for &(code, ref result) in tests.iter() {
-            assert_eq!(
-                br_table(code, &labels),
-                *result,
-                "parse opcode: {}",
-                unsafe { str::from_utf8_unchecked(code) }
-            );
+            assert_eq!(br_table(code, &labels), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
         }
     }
 
@@ -778,43 +750,27 @@ mod tests {
         funcs.names_mut().insert(123, "hello".to_owned());
 
         for &(code, ref result) in tests.iter() {
-            assert_eq!(
-                type_use(code, &funcs),
-                *result,
-                "parse opcode: {}",
-                unsafe { str::from_utf8_unchecked(code) }
-            );
+            assert_eq!(type_use(code, &funcs), *result, "parse opcode: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
         }
     }
 
     #[test]
     fn parse_call_indirect() {
         let call_indirect_tests: Vec<(&[u8], _)> = vec![
-            (
-                b"call_indirect 123",
-                Done(&[][..], Opcode::CallIndirect(123, 0)),
-            ),
-            (
-                b"call_indirect $hello",
-                Done(&[][..], Opcode::CallIndirect(123, 0)),
-            ),
+            (b"call_indirect 123", Done(&[][..], Opcode::CallIndirect(123, 0))),
+            (b"call_indirect $hello", Done(&[][..], Opcode::CallIndirect(123, 0))),
             (
                 b"call_indirect (type $hello)",
                 Done(&[][..], Opcode::CallIndirect(123, 0)),
             ),
-            (
-                b"call_indirect (param i32)",
-                Done(&[][..], Opcode::CallIndirect(0, 0)),
-            ),
-            (
-                b"call_indirect (param i64)",
-                Done(&[][..], Opcode::CallIndirect(1, 0)),
-            ),
+            (b"call_indirect (param i32)", Done(&[][..], Opcode::CallIndirect(0, 0))),
+            (b"call_indirect (param i64)", Done(&[][..], Opcode::CallIndirect(1, 0))),
         ];
         let mut funcs = FunctionNameSection::default();
-        let mut signatures = TypeSection::with_types(vec![
-            Type::Function(FunctionType::new(vec![ValueType::I32], None)),
-        ]);
+        let mut signatures =
+            TypeSection::with_types(vec![Type::Function(FunctionType::new(vec![ValueType::I32], None))]);
 
         funcs.names_mut().insert(123, "hello".to_owned());
 
@@ -912,18 +868,9 @@ mod tests {
             (b"i64.load32_s", Done(&[][..], Opcode::I64Load32S(0, 0))),
             (b"i64.load32_u", Done(&[][..], Opcode::I64Load32U(0, 0))),
             (b"i64.load offset=4", Done(&[][..], Opcode::I64Load(0, 4))),
-            (
-                b"i32.load8_s align=8",
-                Done(&[][..], Opcode::I32Load8S(8, 0)),
-            ),
-            (
-                b"i32.load8_u offset=4 align=8",
-                Done(&[][..], Opcode::I32Load8U(8, 4)),
-            ),
-            (
-                b"i32.load8_s align=3",
-                Error(Position(Verify, &b"align=3"[..])),
-            ),
+            (b"i32.load8_s align=8", Done(&[][..], Opcode::I32Load8S(8, 0))),
+            (b"i32.load8_u offset=4 align=8", Done(&[][..], Opcode::I32Load8U(8, 4))),
+            (b"i32.load8_s align=3", Error(Position(Verify, &b"align=3"[..]))),
             (b"f32.load8_s", Error(Position(Switch, &b""[..]))),
         ];
 
@@ -943,22 +890,10 @@ mod tests {
             (b"f64.store", Done(&[][..], Opcode::F64Store(0, 0))),
             (b"i32.store8", Done(&[][..], Opcode::I32Store8(0, 0))),
             (b"i32.store16", Done(&[][..], Opcode::I32Store16(0, 0))),
-            (
-                b"i64.store8 offset=4",
-                Done(&[][..], Opcode::I64Store8(0, 4)),
-            ),
-            (
-                b"i64.store16 align=8",
-                Done(&[][..], Opcode::I64Store16(8, 0)),
-            ),
-            (
-                b"i64.store32 offset=4 align=8",
-                Done(&[][..], Opcode::I64Store32(8, 4)),
-            ),
-            (
-                b"i32.store32 align=3",
-                Error(Position(Verify, &b"align=3"[..])),
-            ),
+            (b"i64.store8 offset=4", Done(&[][..], Opcode::I64Store8(0, 4))),
+            (b"i64.store16 align=8", Done(&[][..], Opcode::I64Store16(8, 0))),
+            (b"i64.store32 offset=4 align=8", Done(&[][..], Opcode::I64Store32(8, 4))),
+            (b"i32.store32 align=3", Error(Position(Verify, &b"align=3"[..]))),
             (b"f32.store8_s", Error(Position(Switch, &b"_s"[..]))),
         ];
 
@@ -983,10 +918,7 @@ mod tests {
                     ],
                 )),
             ),
-            (
-                b"i32.const -0x80000000",
-                Done(&[][..], Opcode::I32Const(-0x80000000)),
-            ),
+            (b"i32.const -0x80000000", Done(&[][..], Opcode::I32Const(-0x80000000))),
             (
                 b"i64.const 18446744073709551615",
                 Error(NodePosition(

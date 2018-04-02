@@ -1,13 +1,14 @@
 use std::mem;
 
+use failure::{err_msg, Error};
 use itertools;
-use parity_wasm::elements::{BlockType, FunctionType, GlobalEntry, GlobalType, InitExpr, Opcode,
-                            Type, ValueType};
+use parity_wasm::builder::{TableDefinition, TableEntryDefinition};
+use parity_wasm::elements::{BlockType, FunctionType, GlobalEntry, GlobalType, InitExpr, Opcode, TableType, Type,
+                            ValueType};
 
-use parse::{value_type, var, Context, FunctionTypeExt, IndexSpace, Var, float32, float64, int32,
-            int64};
-use ops::{align, binary, compare, convert, mem_size, offset, sign, test, unary};
 use func::func_type;
+use ops::{align, binary, compare, convert, mem_size, offset, sign, test, unary};
+use parse::{value_type, var, Context, FunctionTypeExt, IndexSpace, Var, float32, float64, int32, int64};
 
 #[derive(Clone, Debug)]
 pub struct Global {
@@ -24,19 +25,59 @@ impl PartialEq for Global {
 }
 
 impl Global {
-    pub fn eval(&self, ctxt: &Context) -> GlobalEntry {
-        GlobalEntry::new(
-            self.global_type.clone(),
-            InitExpr::new(
-                self.init_expr
-                    .iter()
-                    .flat_map(|instr| match *instr {
-                        Instr::Const(ref constant) => Some(constant.clone().into()),
-                        _ => None,
-                    })
-                    .collect(),
-            ),
-        )
+    pub fn eval(&self, ctxt: &Context) -> Result<GlobalEntry, Error> {
+        let opcodes = self.init_expr
+            .iter()
+            .map(|instr| match *instr {
+                Instr::Const(ref constant) => Ok(constant.clone().into()),
+                _ => bail!("constant expression required"),
+            })
+            .collect::<Result<Vec<Opcode>, Error>>()?;
+
+        Ok(GlobalEntry::new(self.global_type.clone(), InitExpr::new(opcodes)))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Table {
+    pub table_type: TableType,
+    pub elements: Vec<Var>,
+}
+
+impl PartialEq for Table {
+    fn eq(&self, other: &Self) -> bool {
+        self.table_type.elem_type() == other.table_type.elem_type()
+            && self.table_type.limits().initial() == other.table_type.limits().initial()
+            && self.table_type.limits().maximum() == other.table_type.limits().maximum()
+            && self.elements == other.elements
+    }
+}
+
+impl Table {
+    pub fn eval(&self, ctxt: &Context) -> Result<TableDefinition, Error> {
+        let elements = self.elements
+            .iter()
+            .map(|elem| {
+                match *elem {
+                    Var::Index(idx) => Ok(idx),
+                    Var::Name(ref name) => ctxt.funcs
+                        .names()
+                        .iter()
+                        .position(|(_, ref elem)| *elem == name)
+                        .map(|idx| idx as u32)
+                        .ok_or_else(|| err_msg("undefined element")),
+                }.map(|idx| TableEntryDefinition {
+                    offset: InitExpr::empty(),
+                    values: vec![idx],
+                })
+            })
+            .collect::<Result<Vec<TableEntryDefinition>, Error>>()?;
+
+        Ok(TableDefinition {
+            min: self.table_type.limits().initial(),
+            max: self.table_type.limits().maximum(),
+            elements,
+        })
     }
 }
 
@@ -384,11 +425,7 @@ named_args!(
 
 named!(
     type_use<Var>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(tag!("type"), var),
-        tag!(")")
-    ))
+    ws!(delimited!(tag!("("), preceded!(tag!("type"), var), tag!(")")))
 );
 
 // named!(call_instr_instr<Instr>, tag!(""));
@@ -428,11 +465,7 @@ named_args!(
 
 named!(
     block_type<ValueType>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(tag!("result"), value_type),
-        tag!(")")
-    ))
+    ws!(delimited!(tag!("("), preceded!(tag!("result"), value_type), tag!(")")))
 );
 
 named_args!(expr_list<'a>(ctxt: &'a mut Context)<Vec<Instr>>,
@@ -508,9 +541,9 @@ named_args!(
 mod tests {
     use std::str;
 
-    use pretty_env_logger;
     use nom::IResult::*;
     use parity_wasm::elements::ValueType::*;
+    use pretty_env_logger;
 
     use super::*;
     use super::Instr::*;
@@ -523,27 +556,18 @@ mod tests {
             (b"br 123", Done(&[][..], Br(Var::Index(123)))),
             (b"br $end", Done(&[][..], Br(Var::Name("end".to_owned())))),
             (b"br_if 123", Done(&[][..], BrIf(Var::Index(123)))),
-            (
-                b"br_if $end",
-                Done(&[][..], BrIf(Var::Name("end".to_owned()))),
-            ),
+            (b"br_if $end", Done(&[][..], BrIf(Var::Name("end".to_owned())))),
             (b"br_table 0", Done(&[][..], BrTable(vec![], Var::Index(0)))),
             (
                 b"br_table 0 1 2 3",
                 Done(
                     &[][..],
-                    BrTable(
-                        vec![Var::Index(1), Var::Index(2), Var::Index(3)],
-                        Var::Index(0),
-                    ),
+                    BrTable(vec![Var::Index(1), Var::Index(2), Var::Index(3)], Var::Index(0)),
                 ),
             ),
             (b"return", Done(&[][..], Return)),
             (b"call 123", Done(&[][..], Call(Var::Index(123)))),
-            (
-                b"call $name",
-                Done(&[][..], Call(Var::Name("name".to_owned()))),
-            ),
+            (b"call $name", Done(&[][..], Call(Var::Name("name".to_owned())))),
             (b"get_local 123", Done(&[][..], GetLocal(Var::Index(123)))),
             (
                 b"get_local $name",
@@ -583,10 +607,7 @@ mod tests {
     #[test]
     fn parse_call_instr() {
         let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"call_indirect 123",
-                Done(&[][..], CallIndirect(Var::Index(123))),
-            ),
+            (b"call_indirect 123", Done(&[][..], CallIndirect(Var::Index(123)))),
             (
                 b"call_indirect $hello",
                 Done(&[][..], CallIndirect(Var::Name("hello".to_owned()))),
@@ -595,14 +616,8 @@ mod tests {
                 b"call_indirect (type $hello)",
                 Done(&[][..], CallIndirect(Var::Name("hello".to_owned()))),
             ),
-            (
-                b"call_indirect (param i32)",
-                Done(&[][..], CallIndirect(Var::Index(0))),
-            ),
-            (
-                b"call_indirect (param i64)",
-                Done(&[][..], CallIndirect(Var::Index(1))),
-            ),
+            (b"call_indirect (param i32)", Done(&[][..], CallIndirect(Var::Index(0)))),
+            (b"call_indirect (param i64)", Done(&[][..], CallIndirect(Var::Index(1)))),
             (
                 b"call_indirect (param i32) (param i64) (result f32)",
                 Done(&[][..], CallIndirect(Var::Index(2))),
@@ -616,12 +631,9 @@ mod tests {
             .push(Type::Function(FunctionType::new(vec![I32], None)));
 
         for &(code, ref result) in tests.iter() {
-            assert_eq!(
-                call_instr(code, &mut ctxt),
-                *result,
-                "parse instr: {}",
-                unsafe { str::from_utf8_unchecked(code) }
-            );
+            assert_eq!(call_instr(code, &mut ctxt), *result, "parse instr: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
         }
 
         assert_eq!(
@@ -637,10 +649,7 @@ mod tests {
     #[test]
     fn parse_block_instr() {
         let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"block\nend",
-                Done(&[][..], Block(BlockType::NoResult, vec![])),
-            ),
+            (b"block\nend", Done(&[][..], Block(BlockType::NoResult, vec![]))),
             (
                 b"block (result i32)\nend",
                 Done(&[][..], Block(BlockType::Value(I32), vec![])),
@@ -663,53 +672,35 @@ mod tests {
             ),
             (
                 b"if $done (result i32) nop unreachable\nend $done",
-                Done(
-                    &[][..],
-                    If(BlockType::Value(I32), vec![Nop, Unreachable], vec![]),
-                ),
+                Done(&[][..], If(BlockType::Value(I32), vec![Nop, Unreachable], vec![])),
             ),
             (
                 b"if $done (result i32) nop\nelse unreachable\nend $done",
-                Done(
-                    &[][..],
-                    If(BlockType::Value(I32), vec![Nop], vec![Unreachable]),
-                ),
+                Done(&[][..], If(BlockType::Value(I32), vec![Nop], vec![Unreachable])),
             ),
         ];
 
         let mut ctxt = Context::default();
 
         for &(code, ref result) in tests.iter() {
-            assert_eq!(
-                block_instr(code, &mut ctxt),
-                *result,
-                "parse instr: {}",
-                unsafe { str::from_utf8_unchecked(code) }
-            );
+            assert_eq!(block_instr(code, &mut ctxt), *result, "parse instr: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
         }
     }
 
     #[test]
     fn parse_expr() {
         let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"(block)",
-                Done(&[][..], vec![Block(BlockType::NoResult, vec![])]),
-            ),
-            (
-                b"(block $l)",
-                Done(&[][..], vec![Block(BlockType::NoResult, vec![])]),
-            ),
+            (b"(block)", Done(&[][..], vec![Block(BlockType::NoResult, vec![])])),
+            (b"(block $l)", Done(&[][..], vec![Block(BlockType::NoResult, vec![])])),
             (
                 b"(block (nop))",
                 Done(&[][..], vec![Block(BlockType::NoResult, vec![Nop])]),
             ),
             (
                 b"(block (result i32) (i32.const 7))",
-                Done(
-                    &[][..],
-                    vec![Block(BlockType::Value(I32), vec![Instr::i32(7)])],
-                ),
+                Done(&[][..], vec![Block(BlockType::Value(I32), vec![Instr::i32(7)])]),
             ),
             (
                 b"(block (call $dummy) (call $dummy) (call $dummy) (call $dummy))",
@@ -749,10 +740,7 @@ mod tests {
                                 ),
                                 Block(
                                     BlockType::Value(I32),
-                                    vec![
-                                        Call(Var::Name("dummy".to_owned())),
-                                        Const(Constant::I32(9)),
-                                    ],
+                                    vec![Call(Var::Name("dummy".to_owned())), Const(Constant::I32(9))],
                                 ),
                             ],
                         ),
@@ -763,70 +751,49 @@ mod tests {
                 b"(if (get_local 0) (then))",
                 Done(
                     &[][..],
-                    vec![
-                        GetLocal(Var::Index(0)),
-                        If(BlockType::NoResult, vec![], vec![]),
-                    ],
+                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![], vec![])],
                 ),
             ),
             (
                 b"(if (get_local 0) (then) (else))",
                 Done(
                     &[][..],
-                    vec![
-                        GetLocal(Var::Index(0)),
-                        If(BlockType::NoResult, vec![], vec![]),
-                    ],
+                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![], vec![])],
                 ),
             ),
             (
                 b"(if $l (get_local 0) (then))",
                 Done(
                     &[][..],
-                    vec![
-                        GetLocal(Var::Index(0)),
-                        If(BlockType::NoResult, vec![], vec![]),
-                    ],
+                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![], vec![])],
                 ),
             ),
             (
                 b"(if $l (get_local 0) (then) (else))",
                 Done(
                     &[][..],
-                    vec![
-                        GetLocal(Var::Index(0)),
-                        If(BlockType::NoResult, vec![], vec![]),
-                    ],
+                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![], vec![])],
                 ),
             ),
             (
                 b"(if (get_local 0) (then (nop)))",
                 Done(
                     &[][..],
-                    vec![
-                        GetLocal(Var::Index(0)),
-                        If(BlockType::NoResult, vec![Nop], vec![]),
-                    ],
+                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![Nop], vec![])],
                 ),
             ),
             (
                 b"(if (get_local 0) (then (nop)) (else (nop)))",
                 Done(
                     &[][..],
-                    vec![
-                        GetLocal(Var::Index(0)),
-                        If(BlockType::NoResult, vec![Nop], vec![Nop]),
-                    ],
+                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![Nop], vec![Nop])],
                 ),
             ),
             (
                 b"(if (result i32) (get_local 0) (then (nop)) (else (nop)))",
                 Done(
                     &[][..],
-                    vec![
-                        GetLocal(Var::Index(0)),
-                        If(BlockType::Value(I32), vec![Nop], vec![Nop]),
-                    ],
+                    vec![GetLocal(Var::Index(0)), If(BlockType::Value(I32), vec![Nop], vec![Nop])],
                 ),
             ),
             (

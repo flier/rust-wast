@@ -1,15 +1,16 @@
 use nom::IResult;
+use failure::Error;
 
 use parity_wasm::builder::{signature, ModuleBuilder};
-use parity_wasm::elements::{FunctionType, GlobalType, Module, Type, ValueType};
+use parity_wasm::elements::{FunctionType, GlobalType, Module, TableType, Type, ValueType};
 
-use parse::{value_type, string, value_type_list, var, Context, IndexSpace, Var};
-use ast::{instr_list, Global};
+use ast::{instr_list, Global, Table};
+use parse::{elem_type, string, table_type, value_type, value_type_list, var, var_list, Context, IndexSpace, Var};
 
 fn module(input: &[u8]) -> IResult<&[u8], Module> {
     let mut ctxt = Context::default();
 
-    map!(
+    map_res!(
         input,
         ws!(delimited!(
             tag!("("),
@@ -19,7 +20,7 @@ fn module(input: &[u8]) -> IResult<&[u8], Module> {
             ),
             tag!(")")
         )),
-        |_| {
+        |_| -> Result<Module, Error> {
             let mut builder = ModuleBuilder::new().with_signatures(
                 ctxt.types
                     .types()
@@ -36,10 +37,14 @@ fn module(input: &[u8]) -> IResult<&[u8], Module> {
             );
 
             for global in &ctxt.globals {
-                builder = builder.with_global(global.eval(&ctxt));
+                builder = builder.with_global(global.eval(&ctxt)?);
             }
 
-            builder.build()
+            for table in &ctxt.tables {
+                builder.push_table(table.eval(&ctxt)?);
+            }
+
+            Ok(builder.build())
         }
     )
 }
@@ -63,6 +68,15 @@ named_args!(
 
             if let Some(Var::Name(name)) = bind {
                 ctxt.global_names.insert(name, global_ref);
+            }
+        }} |
+        apply!(table, ctxt) => { |(bind, table)| {
+            trace!("table {:?} = {:?}", bind, table);
+
+            let table_ref = ctxt.tables.get_or_insert(table);
+
+            if let Some(Var::Name(name)) = bind {
+                ctxt.table_names.insert(name, table_ref);
             }
         }}
     )
@@ -192,14 +206,49 @@ named!(
     ))
 );
 
+named_args!(
+    table<'a>(ctxt: &'a mut Context)<(Option<Var>, Table)>,
+    ws!(delimited!(
+        tag!("("),
+        preceded!(first!(tag!("table")), pair!(opt!(first!(var)), first!(apply!(table_fields, ctxt)))),
+        tag!(")")
+    ))
+);
+
+named_args!(
+    table_fields<'a>(ctxt: &'a mut Context)<Table>,
+    alt!(
+        first!(table_type) => { |table_type| Table { table_type, elements: vec![] } } |
+        pair!(first!(inline_import), first!(table_type)) => {
+            |((module_name, item_name), table_type)| Table { table_type, elements: vec![] }
+        } |
+        pair!(first!(inline_export), first!(apply!(table_fields, ctxt))) => {
+            |(export_name, table_def)| table_def
+        } |
+        preceded!(
+            first!(elem_type),
+            ws!(delimited!(
+                tag!("("),
+                preceded!(first!(tag!("elem")), first!(var_list)),
+                tag!(")")
+            ))
+        ) => { |elements: Vec<_>|
+            Table {
+                table_type: TableType::new(elements.len() as u32, Some(elements.len() as u32)),
+                elements
+            }
+        }
+    )
+);
+
 #[cfg(test)]
 mod tests {
-    use std::str;
     use std::mem;
+    use std::str;
 
-    use pretty_env_logger;
-    use parity_wasm::elements::ValueType::*;
     use parity_wasm::elements::Opcode::*;
+    use parity_wasm::elements::ValueType::*;
+    use pretty_env_logger;
 
     use super::*;
 
@@ -258,7 +307,9 @@ mod tests {
             ),
             (
                 b"(module (type (func (param f32 f64) (param $x i32) (param f64 i32 i32))))",
-                vec![Type::Function(FunctionType::new(vec![F32, F64, I32, F64, I32, I32], None))],
+                vec![
+                    Type::Function(FunctionType::new(vec![F32, F64, I32, F64, I32, I32], None)),
+                ],
             ),
             (
                 b"(module (type (func (param) (param $x f32) (param) (param) (param f64 i32) (param))))",
@@ -327,7 +378,7 @@ mod tests {
             (
                 br#"(module (global (export "global-i32") i32 (i32.const 55)))"#,
                 (Some("global_i32"), I32, false, Some(I32Const(55))),
-            )
+            ),
         ];
 
         for (idx, (code, (name, global_type, is_mutable, constant))) in tests.into_iter().enumerate() {

@@ -1,8 +1,8 @@
-use parity_wasm::elements::{FunctionNameSection, FunctionType, ValueType};
 use parity_wasm::builder::{ExportBuilder, FunctionBuilder, ImportBuilder};
+use parity_wasm::elements::{FunctionNameSection, FunctionType, ValueType};
 
-use parse::{string, value_type, value_type_list, var, Var};
 use ops::type_use;
+use parse::{string, value_type, value_type_list, var, Var};
 
 named_args!(
     pub func<'a>(funcs: &'a FunctionNameSection)<(Option<Var>, Option<FunctionBuilder>)>,
@@ -62,11 +62,7 @@ named!(
 named!(
     inline_export<ExportBuilder>,
     map!(
-        ws!(delimited!(
-            tag!("("),
-            preceded!(tag!("export"), string),
-            tag!(")")
-        )),
+        ws!(delimited!(tag!("("), preceded!(tag!("export"), string), tag!(")"))),
         |field| ExportBuilder::new().field(&field)
     )
 );
@@ -104,10 +100,7 @@ mod tests {
             (b"(param i32)", IResult::Done(&[][..], vec![ValueType::I32])),
             (
                 b"(param f64 i32 i64)",
-                IResult::Done(
-                    &[][..],
-                    vec![ValueType::F64, ValueType::I32, ValueType::I64],
-                ),
+                IResult::Done(&[][..], vec![ValueType::F64, ValueType::I32, ValueType::I64]),
             ),
         ];
 
@@ -122,10 +115,7 @@ mod tests {
     fn parse_result() {
         let tests: Vec<(&[u8], _)> = vec![
             (b"(result)", IResult::Done(&[][..], None)),
-            (
-                b"(result i32)",
-                IResult::Done(&[][..], Some(ValueType::I32)),
-            ),
+            (b"(result i32)", IResult::Done(&[][..], Some(ValueType::I32))),
             (
                 b"(result i32 i64)",
                 IResult::Error(nom::Err::Position(ErrorKind::Tag, &b"i64)"[..])),

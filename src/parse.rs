@@ -1,23 +1,23 @@
 use std::{i32, i64};
-use std::str::{self, FromStr};
 use std::collections::HashMap;
+use std::str::{self, FromStr};
 
 use failure::Error;
 use nom::{self, IResult};
 use nom::ErrorKind::*;
-use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, FunctionType, GlobalType,
-                            ImportEntry, Internal, MemoryType, NameMap, TableType, Type,
-                            TypeSection, ValueType};
+use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, FunctionType, GlobalType, ImportEntry,
+                            Internal, MemoryType, NameMap, TableType, Type, TypeSection, ValueType};
 
+use ast::{Global, Table};
 use errors::WastError;
 use func::func_type;
-use ast::Global;
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
     pub types: TypeSection,
     pub typedefs: HashMap<String, usize>,
-    pub tables: NameMap,
+    pub tables: Vec<Table>,
+    pub table_names: HashMap<String, usize>,
     pub memories: NameMap,
     pub funcs: FunctionNameSection,
     pub locals: NameMap,
@@ -262,6 +262,38 @@ fn string_char(input: &[u8]) -> IResult<&[u8], &[u8], u32> {
     }
 }
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    comment,
+    parsing!(Comment,
+        alt!(
+            preceded!(tag!("(;"), take_until_and_consume!(";)")) |
+            preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
+        )
+    )
+);
+
+#[macro_export]
+macro_rules! first(
+    ($input:expr, $submacro:ident!($($arguments:tt)*)) => (
+        {
+            preceded!(
+                $input,
+                call!($crate::parse::skip),
+                $submacro!($($arguments)*)
+            )
+        }
+    );
+
+    ($input:expr, $f:expr) => (
+        first!($input, call!($f));
+    );
+);
+
+named!(pub skip, recognize!(many0!(alt!(comment | whitespace))));
+
+named!(pub whitespace, is_a!(" \t\n\r"));
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Value {
     Int(isize),
@@ -324,7 +356,9 @@ named!(
     )
 );
 
-named!(pub value_type_list<Vec<ValueType>>, ws!(many0!(value_type)));
+named!(pub var_list<Vec<Var>>, many0!(first!(var)));
+
+named!(pub value_type_list<Vec<ValueType>>, ws!(many0!(first!(value_type))));
 
 /// value_type: i32 | i64 | f32 | f64
 named!(pub value_type<ValueType>, alt!(int_type | float_type ));
@@ -362,14 +396,19 @@ named!(
     ))
 );
 
-named!(elem_type, tag!("anyfunc"));
+named!(pub elem_type, tag!("anyfunc"));
 
 named!(
-    table_type<TableType>,
+    pub table_type<TableType>,
     map!(
-        ws!(tuple!(nat32, opt!(nat32), elem_type)),
-        |(min, max, _)| TableType::new(min, max)
+        pair!(limits, first!(elem_type)),
+        |((min, max), _)| TableType::new(min, max)
     )
+);
+
+named!(
+    limits<(u32, Option<u32>)>,
+    pair!(first!(nat32), opt!(first!(nat32)))
 );
 
 named!(
@@ -433,45 +472,13 @@ named_args!(
     )
 );
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
-named!(
-    comment,
-    parsing!(Comment,
-        alt!(
-            preceded!(tag!("(;"), take_until_and_consume!(";)")) |
-            preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
-        )
-    )
-);
-
-#[macro_export]
-macro_rules! first(
-    ($input:expr, $submacro:ident!($($arguments:tt)*)) => (
-        {
-            preceded!(
-                $input,
-                call!($crate::parse::skip),
-                $submacro!($($arguments)*)
-            )
-        }
-    );
-
-    ($input:expr, $f:expr) => (
-        first!($input, call!($f));
-    );
-);
-
-named!(pub skip, recognize!(many0!(alt!(comment | whitespace))));
-
-named!(pub whitespace, is_a!(" \t\n\r"));
-
 #[cfg(test)]
 mod tests {
     use pretty_env_logger;
 
-    use nom::Needed;
-    use nom::IResult::{Done, Error, Incomplete};
     use nom::Err::{NodePosition, Position};
+    use nom::IResult::{Done, Error, Incomplete};
+    use nom::Needed;
     use parity_wasm::elements::FunctionType;
 
     use super::*;

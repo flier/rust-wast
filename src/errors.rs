@@ -5,8 +5,10 @@ use nom::{generate_colors, prepare_errors, print_codes, print_offsets};
 
 #[derive(Debug, Fail)]
 pub enum WastError {
-    #[fail(display = "out of range: {}", _0)] OutOfRange(isize),
-    #[fail(display = "not found: {}", _0)] NotFound(String),
+    #[fail(display = "out of range: {}", _0)]
+    OutOfRange(isize),
+    #[fail(display = "not found: {}", _0)]
+    NotFound(String),
 }
 
 #[repr(u32)]
@@ -42,7 +44,7 @@ impl From<Parsing> for ErrorKind {
     }
 }
 
-lazy_static!{
+lazy_static! {
     static ref PARSING_VALUES: HashMap<u32, &'static str> = {
         let mut values = HashMap::new();
 
@@ -109,7 +111,7 @@ pub fn trace_parse_error<O>(input: &[u8], res: IResult<&[u8], O>) {
 
 #[macro_export]
 macro_rules! trace_parse_error {
-    ($input:expr, $res:expr) => {
+    ($input: expr, $res: expr) => {
         if $res.is_err() {
             $crate::errors::trace_parse_error($input, $res.clone())
         }

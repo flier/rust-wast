@@ -4,7 +4,7 @@ use nom::IResult;
 use parity_wasm::builder::{signature, ModuleBuilder};
 use parity_wasm::elements::{FunctionType, GlobalType, InitExpr, Module, TableType, Type, ValueType};
 
-use ast::{init_expr, Data, Global, Table};
+use ast::{init_expr, Data, Elem, Global, Table};
 use parse::{elem_type, string, string_list, table_type, value_type, value_type_list, var, var_list, Context,
             IndexSpace, Var};
 
@@ -83,7 +83,12 @@ named_args!(
         apply!(data, ctxt) => { |data| {
             trace!("data {:?}", data);
 
-            let data_ref = ctxt.data.get_or_insert(data);
+            ctxt.data.get_or_insert(data);
+        }} |
+        apply!(elem, ctxt) => { |elem| {
+            trace!("elem {:?}", elem);
+
+            ctxt.elems.get_or_insert(elem);
         }}
     )
 );
@@ -235,7 +240,7 @@ named_args!(
             first!(elem_type),
             ws!(delimited!(
                 tag!("("),
-                preceded!(first!(tag!("elem")), first!(var_list)),
+                preceded!(first!(tag!("elem")), var_list),
                 tag!(")")
             ))
         ) => { |elements: Vec<_>|
@@ -244,6 +249,30 @@ named_args!(
                 elements
             }
         }
+    )
+);
+
+named_args!(
+    elem<'a>(ctxt: &'a mut Context)<Elem>,
+    parsing!(Elem,
+        map!(ws!(delimited!(
+            tag!("("),
+            preceded!(
+                first!(tag!("elem")),
+                tuple!(
+                    opt!(first!(var)),
+                    alt_complete!(first!(apply!(offset, ctxt)) | first!(apply!(init_expr, ctxt))),
+                    var_list
+                )
+            ),
+            tag!(")")
+        )), |(table_index, offset, elements)| {
+            Elem {
+                table_index: table_index.unwrap_or(Var::Index(0)),
+                offset,
+                elements,
+            }
+        })
     )
 );
 
@@ -564,6 +593,122 @@ mod tests {
             trace_parse_error!(code, res);
 
             assert_eq!(res, IResult::Done(&[][..], value.clone()), "parse data: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_elem() {
+        let _ = pretty_env_logger::try_init();
+
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                b"(elem (i32.const 0))",
+                Elem {
+                    table_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![],
+                },
+            ),
+            (
+                b"(elem (i32.const 0) $f $f)",
+                Elem {
+                    table_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                },
+            ),
+            (
+                b"(elem (offset (i32.const 0)))",
+                Elem {
+                    table_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![],
+                },
+            ),
+            (
+                b"(elem (offset (i32.const 0)) $f $f)",
+                Elem {
+                    table_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                },
+            ),
+            (
+                b"(elem 0 (i32.const 0))",
+                Elem {
+                    table_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![],
+                },
+            ),
+            (
+                b"(elem 0x0 (i32.const 0) $f $f)",
+                Elem {
+                    table_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                },
+            ),
+            (
+                b"(elem 0x000 (offset (i32.const 0)))",
+                Elem {
+                    table_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![],
+                },
+            ),
+            (
+                b"(elem 0 (offset (i32.const 0)) $f $f)",
+                Elem {
+                    table_index: Var::Index(0),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                },
+            ),
+            (
+                b"(elem $t (i32.const 0))",
+                Elem {
+                    table_index: Var::Name("t".to_owned()),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![],
+                },
+            ),
+            (
+                b"(elem $t (i32.const 0) $f $f)",
+                Elem {
+                    table_index: Var::Name("t".to_owned()),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                },
+            ),
+            (
+                b"(elem $t (offset (i32.const 0)))",
+                Elem {
+                    table_index: Var::Name("t".to_owned()),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![],
+                },
+            ),
+            (
+                b"(elem $t (offset (i32.const 0)) $f $f)",
+                Elem {
+                    table_index: Var::Name("t".to_owned()),
+                    offset: InitExpr::new(vec![I32Const(0)]),
+                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                },
+            ),
+        ];
+
+        for (code, ref value) in tests {
+            let mut ctxt = Context::default();
+
+            let res = elem(code, &mut ctxt);
+
+            trace_parse_error!(code, res);
+
+            assert_eq!(res, IResult::Done(&[][..], value.clone()), "parse elem: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

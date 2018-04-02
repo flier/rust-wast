@@ -86,6 +86,20 @@ impl PartialEq for Data {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Elem {
+    pub table_index: Var,
+    pub offset: InitExpr,
+    pub elements: Vec<Var>,
+}
+
+impl PartialEq for Elem {
+    fn eq(&self, other: &Self) -> bool {
+        self.table_index == other.table_index && self.offset.code() == other.offset.code()
+            && self.elements == other.elements
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instr {
     /// trap unconditionally

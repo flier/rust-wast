@@ -37,6 +37,7 @@ pub enum Parsing {
     TypeDef,
     Global,
     Data,
+    Elem,
 }
 
 impl From<Parsing> for ErrorKind {
@@ -72,6 +73,7 @@ lazy_static! {
         values.insert(Parsing::TypeDef as u32, "typedef");
         values.insert(Parsing::Global as u32, "global");
         values.insert(Parsing::Data as u32, "data");
+        values.insert(Parsing::Elem as u32, "elem");
 
         values
     };

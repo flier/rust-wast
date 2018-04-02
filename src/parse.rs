@@ -8,7 +8,7 @@ use nom::ErrorKind::*;
 use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, FunctionType, GlobalType, ImportEntry,
                             Internal, MemoryType, NameMap, TableType, Type, TypeSection, ValueType};
 
-use ast::{Data, Global, Table};
+use ast::{Data, Elem, Global, Table};
 use errors::WastError;
 use func::func_type;
 
@@ -18,9 +18,9 @@ pub struct Context {
     pub typedefs: HashMap<String, usize>,
     pub tables: Vec<Table>,
     pub table_names: HashMap<String, usize>,
-    pub data: Vec<Data>,
-    pub data_names: HashMap<String, usize>,
+    pub elems: Vec<Elem>,
     pub memories: NameMap,
+    pub data: Vec<Data>,
     pub funcs: FunctionNameSection,
     pub locals: NameMap,
     pub globals: Vec<Global>,
@@ -365,7 +365,7 @@ named!(
 
 named!(pub var_list<Vec<Var>>, many0!(first!(var)));
 
-named!(pub value_type_list<Vec<ValueType>>, ws!(many0!(first!(value_type))));
+named!(pub value_type_list<Vec<ValueType>>, many0!(first!(value_type)));
 
 /// value_type: i32 | i64 | f32 | f64
 named!(pub value_type<ValueType>, alt!(int_type | float_type ));

@@ -20,7 +20,6 @@ mod export;
 mod module;
 
 pub use self::comment::comment;
-pub use self::whitespace::whitespace;
 pub use self::data::data;
 pub use self::elem::elem;
 pub use self::export::inline_export;
@@ -38,3 +37,4 @@ pub use self::types::{elem_type, float_type, func_type, global_type, int_type, l
                       value_type, value_type_list};
 pub use self::values::{float, int, name, nat, string, string_list, float32, float64, int32, int64, nat32};
 pub use self::var::{bind_var, var, var_list};
+pub use self::whitespace::whitespace;

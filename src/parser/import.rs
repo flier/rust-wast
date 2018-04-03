@@ -22,9 +22,12 @@ mod tests {
         let tests: Vec<(&[u8], _)> = vec![(b"(import \"m\" \"a\")", ("m", "a"))];
 
         for (code, (module, field)) in tests {
-            assert_eq!(inline_import(code), Done(&[][..], (module.to_owned(), field.to_owned())), "parse inline_import: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
+            assert_eq!(
+                inline_import(code),
+                Done(&[][..], (module.to_owned(), field.to_owned())),
+                "parse inline_import: {}",
+                unsafe { str::from_utf8_unchecked(code) }
+            );
         }
     }
 }

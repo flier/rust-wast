@@ -1,5 +1,3 @@
-use super::comment;
+use super::{comment, whitespace};
 
 named!(pub skip, recognize!(many0!(alt!(comment | whitespace))));
-
-named!(whitespace, is_a!(" \t\n\r"));

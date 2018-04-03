@@ -4,6 +4,7 @@ mod values;
 mod var;
 mod types;
 mod comment;
+mod whitespace;
 mod skip;
 mod ops;
 mod instr;
@@ -19,6 +20,7 @@ mod export;
 mod module;
 
 pub use self::comment::comment;
+pub use self::whitespace::whitespace;
 pub use self::data::data;
 pub use self::elem::elem;
 pub use self::export::inline_export;

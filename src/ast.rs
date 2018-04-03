@@ -8,6 +8,16 @@ pub enum Var {
     Name(String),
 }
 
+impl Var {
+    pub fn index(v: u32) -> Self {
+        Var::Index(v)
+    }
+
+    pub fn name<S: Into<String>>(s: S) -> Self {
+        Var::Name(s.into())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Global {
     pub global_type: GlobalType,

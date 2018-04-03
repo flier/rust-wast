@@ -2,8 +2,7 @@ use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, Function
                             TypeSection};
 
 use ast::Var;
-use func::func_type;
-use parser::{global_type, memory_type, name, string, table_type, var};
+use parser::{func_type, global_type, memory_type, name, string, table_type, var};
 
 pub trait FunctionTypeExt {
     fn is_empty(&self) -> bool;

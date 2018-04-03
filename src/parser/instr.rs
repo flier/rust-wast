@@ -1,10 +1,9 @@
 use itertools;
 use parity_wasm::elements::{BlockType, ValueType};
 
-use super::{align, binary, compare, convert, expr, mem_size, sign, test, unary, value_type, var, float32, float64,
-            int32, int64, nat32};
+use super::{align, binary, compare, convert, expr, func_type, mem_size, sign, test, unary, value_type, var, float32,
+            float64, int32, int64, nat32};
 use ast::{Constant, Instr, Load, Store, Var};
-use func::func_type;
 
 named!(
     pub instr_list<Vec<Instr>>,

@@ -1,8 +1,8 @@
 use parity_wasm::builder::{ExportBuilder, FunctionBuilder, ImportBuilder};
-use parity_wasm::elements::{FunctionNameSection, FunctionType, ValueType};
+use parity_wasm::elements::{FunctionNameSection, ValueType};
 
 use ast::Var;
-use parser::{string, type_use, value_type, value_type_list, var};
+use parser::{func_type, string, type_use, value_type, value_type_list, var};
 
 named_args!(
     pub func<'a>(funcs: &'a FunctionNameSection)<(Option<Var>, Option<FunctionBuilder>)>,
@@ -20,24 +20,6 @@ named_args!(
         tuple!(inline_import, opt!(type_use), func_type) => { |_| FunctionBuilder::new() } |
         pair!(inline_export, apply!(func_fields, funcs)) => { |_| FunctionBuilder::new() }
     ))
-);
-
-named!(
-    pub func_type<Option<FunctionType>>,
-    parsing!(FuncType,
-        map!(
-            pair!(many0!(first!(param)), opt!(complete!(first!(result)))),
-            |(params, result_type)|
-                if params.is_empty() && result_type.is_none() {
-                    None
-                } else {
-                    Some(FunctionType::new(
-                        params.into_iter().flat_map(|param| param).collect(),
-                        result_type.unwrap_or_default()
-                    ))
-                }
-        )
-    )
 );
 
 named!(
@@ -72,67 +54,11 @@ named!(
     )
 );
 
-named!(
-    pub param<Vec<ValueType>>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(tag!("param"), value_type_list),
-        tag!(")")
-    ))
-);
-
-named!(
-    pub result<Option<ValueType>>,
-    ws!(delimited!(
-        tag!("("),
-        preceded!(tag!("result"), opt!(first!(value_type))),
-        tag!(")")
-    ))
-);
-
 #[cfg(test)]
 mod tests {
     use std::str;
 
-    use nom::{self, ErrorKind, IResult};
-
     use super::*;
-
-    #[test]
-    fn parse_param() {
-        let tests: Vec<(&[u8], _)> = vec![
-            (b"(param)", IResult::Done(&[][..], vec![])),
-            (b"(param i32)", IResult::Done(&[][..], vec![ValueType::I32])),
-            (
-                b"(param f64 i32 i64)",
-                IResult::Done(&[][..], vec![ValueType::F64, ValueType::I32, ValueType::I64]),
-            ),
-        ];
-
-        for &(code, ref result) in tests.iter() {
-            assert_eq!(param(code), *result, "parse func_param: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
-        }
-    }
-
-    #[test]
-    fn parse_result() {
-        let tests: Vec<(&[u8], _)> = vec![
-            (b"(result)", IResult::Done(&[][..], None)),
-            (b"(result i32)", IResult::Done(&[][..], Some(ValueType::I32))),
-            (
-                b"(result i32 i64)",
-                IResult::Error(nom::Err::Position(ErrorKind::Tag, &b"i64)"[..])),
-            ),
-        ];
-
-        for &(code, ref res) in tests.iter() {
-            assert_eq!(result(code), *res, "parse func_result: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
-        }
-    }
 
     #[test]
     fn parse_inline_import() {
@@ -155,22 +81,6 @@ mod tests {
             let res = inline_export(code);
 
             assert!(res.is_done(), "parse `{}` failed", unsafe {
-                str::from_utf8_unchecked(code)
-            });
-        }
-    }
-
-    #[test]
-    fn parse_func() {
-        let tests: Vec<(&[u8], _)> = vec![
-            (
-                b"(func)",
-                IResult::Error(nom::Err::Position(ErrorKind::Tag, &b"func)"[..])),
-            ),
-        ];
-
-        for &(code, ref res) in tests.iter() {
-            assert_eq!(result(code), *res, "parse func: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

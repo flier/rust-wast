@@ -98,6 +98,11 @@ named_args!(
             trace!("data {:?}", data);
 
             ctxt.data.get_or_insert(data);
+        }} |
+        start => { |entry| {
+            trace!("start {:?}", entry);
+
+            ctxt.entry = Some(entry);
         }}
     )
 );
@@ -365,11 +370,16 @@ named!(
 
 named!(
     offset<InitExpr>,
-    ws!(delimited!(
+    delimited!(
         tag!("("),
         preceded!(first!(tag!("offset")), first!(init_expr)),
         tag!(")")
-    ))
+    )
+);
+
+named!(
+    start<Var>,
+    delimited!(tag!("("), preceded!(first!(tag!("start")), first!(var)), tag!(")"))
 );
 
 #[cfg(test)]
@@ -925,6 +935,26 @@ mod tests {
             trace_parse_error!(code, res);
 
             assert_eq!(res, IResult::Done(&[][..], value.clone()), "parse elem: {}", unsafe {
+                str::from_utf8_unchecked(code)
+            });
+        }
+    }
+
+    #[test]
+    fn parse_start() {
+        let _ = pretty_env_logger::try_init();
+
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"(start $main)", Var::Name("main".to_owned())),
+            (b"(start 2)", Var::Index(2)),
+        ];
+
+        for (code, ref value) in tests {
+            let res = start(code);
+
+            trace_parse_error!(code, res);
+
+            assert_eq!(res, IResult::Done(&[][..], value.clone()), "parse start: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

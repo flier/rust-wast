@@ -26,6 +26,7 @@ pub struct Context {
     pub globals: Vec<Global>,
     pub global_names: HashMap<String, usize>,
     pub labels: NameMap,
+    pub entry: Option<Var>,
 }
 
 #[derive(Clone, Debug)]

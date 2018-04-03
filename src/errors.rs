@@ -40,6 +40,7 @@ pub enum Parsing {
     Memory,
     Data,
     Elem,
+    Start,
 }
 
 impl From<Parsing> for ErrorKind {
@@ -78,6 +79,7 @@ lazy_static! {
         values.insert(Parsing::Memory as u32, "memory");
         values.insert(Parsing::Data as u32, "data");
         values.insert(Parsing::Elem as u32, "elem");
+        values.insert(Parsing::Start as u32, "start");
 
         values
     };

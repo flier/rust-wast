@@ -118,16 +118,8 @@ named!(
     )
 );
 
-named!(pub float32<f32>, map_res!(float, |s: String| {
-    trace!("parsing f32: {}", s);
-
-    f32::from_str(&s)
-}));
-named!(pub float64<f64>, map_res!(float, |s: String| {
-    trace!("parsing f64: {}", s);
-
-    f64::from_str(&s)
-}));
+named!(pub float32<f32>, map_res!(float, |s: String| f32::from_str(&s)));
+named!(pub float64<f64>, map_res!(float, |s: String| f64::from_str(&s)));
 
 named!(
     sign<&str>,

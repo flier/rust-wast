@@ -1,12 +1,10 @@
+named!(pub comment, parsing!(Comment, alt!(line_comment | block_comment)));
+
+named!(line_comment, preceded!(tag!("(;"), take_until_and_consume!(";)")));
+
 named!(
-    pub comment,
-    parsing!(
-        Comment,
-        alt!(
-            preceded!(tag!("(;"), take_until_and_consume!(";)"))
-                | preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
-        )
-    )
+    block_comment,
+    preceded!(tag!(";;"), re_bytes_find_static!(r"^(?-u).*?(\r\n|\n|$)"))
 );
 
 #[cfg(test)]

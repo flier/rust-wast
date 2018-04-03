@@ -19,10 +19,11 @@ extern crate pretty_env_logger;
 #[macro_use]
 mod errors;
 #[macro_use]
+mod parser;
+#[macro_use]
 mod parse;
 mod ast;
-mod ops;
+//mod ops;
 mod func;
-mod module;
 
 pub use errors::WastError;

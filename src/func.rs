@@ -1,8 +1,8 @@
 use parity_wasm::builder::{ExportBuilder, FunctionBuilder, ImportBuilder};
 use parity_wasm::elements::{FunctionNameSection, FunctionType, ValueType};
 
-use ops::type_use;
-use parse::{string, value_type, value_type_list, var, Var};
+use ast::Var;
+use parser::{string, type_use, value_type, value_type_list, var};
 
 named_args!(
     pub func<'a>(funcs: &'a FunctionNameSection)<(Option<Var>, Option<FunctionBuilder>)>,
@@ -16,8 +16,8 @@ named_args!(
 named_args!(
     func_fields<'a>(funcs: &'a FunctionNameSection)<FunctionBuilder>,
     ws!(alt_complete!(
-        pair!(opt!(apply!(type_use, funcs)), func_type) => { |_| FunctionBuilder::new() } |
-        tuple!(inline_import, opt!(apply!(type_use, funcs)), func_type) => { |_| FunctionBuilder::new() } |
+        pair!(opt!(type_use), func_type) => { |_| FunctionBuilder::new() } |
+        tuple!(inline_import, opt!(type_use), func_type) => { |_| FunctionBuilder::new() } |
         pair!(inline_export, apply!(func_fields, funcs)) => { |_| FunctionBuilder::new() }
     ))
 );

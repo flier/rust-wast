@@ -49,7 +49,7 @@ named!(
             first!(tag!("param")),
             alt!(
                 pair!(first!(var), first!(value_type)) => { |(id, vt)| vec![vt] } |
-                first!(value_type_list)
+                value_type_list
             )
         ),
         tag!(")")

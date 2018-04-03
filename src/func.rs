@@ -28,7 +28,7 @@ named!(
         tag!("("),
         preceded!(tag!("param"), alt!(
             preceded!(var, value_type) => { |ty| vec![ty] } |
-            value_type_list => { |types| types }
+            value_type_list
         )),
         tag!(")")
     ))

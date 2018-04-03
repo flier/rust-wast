@@ -1,7 +1,8 @@
 use itertools;
 use parity_wasm::elements::{FunctionType, GlobalType, MemoryType, TableType, ValueType};
 
-use super::nat32;
+use super::{id, nat32};
+use ast::Var;
 
 named!(pub value_type_list<Vec<ValueType>>, many0!(first!(value_type)));
 
@@ -34,7 +35,7 @@ named!(
                     None
                 } else {
                     Some(FunctionType::new(
-                        itertools::flatten(params).collect(),
+                        itertools::flatten(params).map(|(_, vt)| vt).collect(),
                         result_type.unwrap_or_default()
                     ))
                 }
@@ -43,8 +44,22 @@ named!(
 );
 
 named!(
-    param<Vec<ValueType>>,
-    delimited!(tag!("("), preceded!(first!(tag!("param")), value_type_list), tag!(")"))
+    param<Vec<(Option<Var>, ValueType)>>,
+    delimited!(
+        tag!("("),
+        preceded!(
+            first!(tag!("param")),
+            alt_complete!(
+                pair!(first!(id), first!(value_type)) => { |(id, vt): (&str, _)|
+                    vec![(Some(Var::Id(id.to_owned())), vt)]
+                } |
+                value_type_list => { |params: Vec<_>|
+                    params.into_iter().map(|vt| (None, vt)).collect()
+                }
+            )
+        ),
+        tag!(")")
+    )
 );
 
 named!(
@@ -137,8 +152,14 @@ mod tests {
     fn parse_param() {
         let tests: Vec<(&[u8], _)> = vec![
             (b"(param)", Done(&[][..], vec![])),
-            (b"(param i32)", Done(&[][..], vec![I32])),
-            (b"(param f64 i32 i64)", Done(&[][..], vec![F64, I32, I64])),
+            (
+                b"(param $arg i32)",
+                Done(&[][..], vec![(Some(Var::Id("arg".to_owned())), I32)]),
+            ),
+            (
+                b"(param f64 i32 i64)",
+                Done(&[][..], vec![(None, F64), (None, I32), (None, I64)]),
+            ),
         ];
 
         for &(code, ref result) in tests.iter() {

@@ -1,5 +1,6 @@
-use std::{str, f32, f64, i32, i64};
+use std::{char, str, f32, f64, i32, i64};
 use std::str::FromStr;
+use std::iter::FromIterator;
 
 use nom;
 
@@ -148,35 +149,59 @@ named!(pub string_list<Vec<String>>, many0!(first!(string)));
 named!(
     pub string<String>,
     parsing!(Str,
-        alt_complete!(
-            tag!("\"\"") => { |_| String::default() } |
+        dbg_dmp!(alt_complete!(
+            tag!("\"\"") => { |_| Default::default() } |
             delimited!(
                 tag!("\""),
                 map!(
                     escaped_transform!(string_char, '\\',
-                        alt!(
-                            tag!("r") => { |_| &b"\r"[..] } |
-                            tag!("n") => { |_| &b"\n"[..] } |
-                            tag!("t") => { |_| &b"\t"[..] } |
-                            tag!("\\") => { |_| &b"\\"[..] } |
-                            tag!("'") => { |_| &b"'"[..] } |
-                            tag!("\"") => { |_| &b"\""[..] }
+                        alt_complete!(
+                            tag!("r") => { |_| vec!['\r'] } |
+                            tag!("n") => { |_| vec!['\n'] } |
+                            tag!("t") => { |_| vec!['\t'] } |
+                            tag!("\\") => { |_| vec!['\\'] } |
+                            tag!("'") => { |_| vec!['\''] } |
+                            tag!("\"") => { |_| vec!['"'] } |
+                            hex_char => { |b| vec![char::from(b)] } |
+                            unicode_char => { |c| vec![c] }
                         )
                     ),
-                    |s| String::from_utf8_lossy(&s).into_owned()
+                    String::from_iter
                 ),
                 tag!("\"")
             )
-        )
+        ))
     )
 );
 
-fn string_char(input: &[u8]) -> nom::IResult<&[u8], &[u8], u32> {
+named!(
+    hex_char<u8>,
+    map_res!(
+        map_res!(
+            verify!(take!(2), |v: &[u8]| v.iter().all(|c| c.is_ascii_hexdigit())),
+            str::from_utf8
+        ),
+        |s| u8::from_str_radix(s, 16)
+    )
+);
+
+named!(
+    unicode_char<char>,
+    map!(
+        map_res!(delimited!(tag!("u{"), hexnum, tag!("}")), |s: String| {
+            u32::from_str_radix(&s, 16)
+        }),
+        |n| unsafe { char::from_u32_unchecked(n) }
+    )
+);
+
+fn string_char(input: &[u8]) -> nom::IResult<&[u8], Vec<char>, u32> {
     match input.iter().position(|&b| b == b'\\' || b == b'\"') {
         None => nom::IResult::Done(&input[input.len()..], input),
         Some(index) if index > 0 => nom::IResult::Done(&input[index..], &input[..index]),
         _ => nom::IResult::Error(error_position!(nom::ErrorKind::Tag, input)),
-    }
+    }.map(|bytes| unsafe { str::from_utf8_unchecked(bytes) })
+        .map(|s| s.chars().collect())
 }
 
 #[cfg(test)]
@@ -349,12 +374,14 @@ mod tests {
     #[test]
     fn parse_string() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"\"\"", Done(&b""[..], "".to_owned())),
-            (b"\"hello world\"", Done(&b""[..], "hello world".to_owned())),
+            (br#""""#, Done(&b""[..], "".to_owned())),
+            (br#""hello world""#, Done(&b""[..], "hello world".to_owned())),
             (
-                b"\"hello \\r\\n\\t\\\\\\'\\\"world\"",
-                Done(&b""[..], "hello \r\n\t\\'\"world".to_owned()),
+                br#""hello \r \n \t \\ \' \" world""#,
+                Done(&b""[..], "hello \r \n \t \\ \' \" world".to_owned()),
             ),
+            (br#""\61""#, Done(&b""[..], "a".to_owned())),
+            (br#""\u{6d4b}\u{8bd5}""#, Done(&b""[..], "测试".to_owned())),
             (
                 b"",
                 Error(NodePosition(Custom(Str as u32), &[][..], vec![Position(Alt, &[][..])])),

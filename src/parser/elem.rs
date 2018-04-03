@@ -55,7 +55,7 @@ mod tests {
                 Elem {
                     table_index: Var::Index(0),
                     offset: InitExpr::new(vec![I32Const(0)]),
-                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                    elements: vec![Var::Id("f".to_owned()), Var::Id("f".to_owned())],
                 },
             ),
             (
@@ -71,7 +71,7 @@ mod tests {
                 Elem {
                     table_index: Var::Index(0),
                     offset: InitExpr::new(vec![I32Const(0)]),
-                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                    elements: vec![Var::Id("f".to_owned()), Var::Id("f".to_owned())],
                 },
             ),
             (
@@ -87,7 +87,7 @@ mod tests {
                 Elem {
                     table_index: Var::Index(0),
                     offset: InitExpr::new(vec![I32Const(0)]),
-                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                    elements: vec![Var::Id("f".to_owned()), Var::Id("f".to_owned())],
                 },
             ),
             (
@@ -103,13 +103,13 @@ mod tests {
                 Elem {
                     table_index: Var::Index(0),
                     offset: InitExpr::new(vec![I32Const(0)]),
-                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                    elements: vec![Var::Id("f".to_owned()), Var::Id("f".to_owned())],
                 },
             ),
             (
                 b"(elem $t (i32.const 0))",
                 Elem {
-                    table_index: Var::Name("t".to_owned()),
+                    table_index: Var::Id("t".to_owned()),
                     offset: InitExpr::new(vec![I32Const(0)]),
                     elements: vec![],
                 },
@@ -117,15 +117,15 @@ mod tests {
             (
                 b"(elem $t (i32.const 0) $f $f)",
                 Elem {
-                    table_index: Var::Name("t".to_owned()),
+                    table_index: Var::Id("t".to_owned()),
                     offset: InitExpr::new(vec![I32Const(0)]),
-                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                    elements: vec![Var::Id("f".to_owned()), Var::Id("f".to_owned())],
                 },
             ),
             (
                 b"(elem $t (offset (i32.const 0)))",
                 Elem {
-                    table_index: Var::Name("t".to_owned()),
+                    table_index: Var::Id("t".to_owned()),
                     offset: InitExpr::new(vec![I32Const(0)]),
                     elements: vec![],
                 },
@@ -133,9 +133,9 @@ mod tests {
             (
                 b"(elem $t (offset (i32.const 0)) $f $f)",
                 Elem {
-                    table_index: Var::Name("t".to_owned()),
+                    table_index: Var::Id("t".to_owned()),
                     offset: InitExpr::new(vec![I32Const(0)]),
-                    elements: vec![Var::Name("f".to_owned()), Var::Name("f".to_owned())],
+                    elements: vec![Var::Id("f".to_owned()), Var::Id("f".to_owned())],
                 },
             ),
         ];

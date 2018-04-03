@@ -8,7 +8,7 @@ use parity_wasm::elements::{BlockType, FunctionNameSection, FunctionType, Opcode
 
 use ast::Var;
 use func::{param, result};
-use parse::{int_type, name, value_type, var, float32, float64, int32, int64, nat32};
+use parse::{id, int_type, value_type, var, float32, float64, int32, int64, nat32};
 
 named_args!(
     opcode<'a>(labels: &'a NameMap,
@@ -60,39 +60,35 @@ named_args!(
 named!(
     block<Opcode>,
     map!(
-        ws!(tuple!(
-            tag!("block"),
-            opt!(complete!(name)),
-            opt!(complete!(block_type))
-        )),
-        |(_, name, block_type)| Opcode::Block(block_type.unwrap_or_else(|| BlockType::NoResult))
+        ws!(tuple!(tag!("block"), opt!(complete!(id)), opt!(complete!(block_type)))),
+        |(_, id, block_type)| Opcode::Block(block_type.unwrap_or_else(|| BlockType::NoResult))
     )
 );
 
 named!(
     loop_<Opcode>,
     map!(
-        ws!(tuple!(tag!("loop"), opt!(complete!(name)), opt!(complete!(block_type)))),
-        |(_, name, block_type)| Opcode::Loop(block_type.unwrap_or_else(|| BlockType::NoResult))
+        ws!(tuple!(tag!("loop"), opt!(complete!(id)), opt!(complete!(block_type)))),
+        |(_, id, block_type)| Opcode::Loop(block_type.unwrap_or_else(|| BlockType::NoResult))
     )
 );
 
 named!(
     if_<Opcode>,
     map!(
-        ws!(tuple!(tag!("if"), opt!(complete!(name)), opt!(complete!(block_type)))),
-        |(_, name, block_type)| Opcode::If(block_type.unwrap_or_else(|| BlockType::NoResult))
+        ws!(tuple!(tag!("if"), opt!(complete!(id)), opt!(complete!(block_type)))),
+        |(_, id, block_type)| Opcode::If(block_type.unwrap_or_else(|| BlockType::NoResult))
     )
 );
 
 named!(
     else_<Opcode>,
-    map!(ws!(preceded!(tag!("else"), opt!(complete!(name)))), |name| Opcode::Else)
+    map!(ws!(preceded!(tag!("else"), opt!(complete!(id)))), |id| Opcode::Else)
 );
 
 named!(
     end<Opcode>,
-    map!(ws!(preceded!(tag!("end"), opt!(complete!(name)))), |name| Opcode::End)
+    map!(ws!(preceded!(tag!("end"), opt!(complete!(id)))), |id| Opcode::End)
 );
 
 named!(

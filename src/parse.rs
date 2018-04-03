@@ -2,7 +2,7 @@ use parity_wasm::elements::{ExportEntry, External, FunctionNameSection, Function
                             TypeSection};
 
 use ast::Var;
-use parser::{func_type, global_type, memory_type, name, string, table_type, var};
+use parser::{func_type, global_type, id, memory_type, string, table_type, var};
 
 pub trait FunctionTypeExt {
     fn is_empty(&self) -> bool;
@@ -76,17 +76,17 @@ named_args!(
     delimited!(
         tag!("("),
         alt!(
-            ws!(tuple!(tag!("func"), opt!(name), func_type)) => {
-                |(_, name, ty)| External::Function(0 /*funcs.get_or_insert(ty) as u32*/)
+            ws!(tuple!(tag!("func"), opt!(id), func_type)) => {
+                |(_, id, ty)| External::Function(0 /*funcs.get_or_insert(ty) as u32*/)
             } |
-            ws!(tuple!(tag!("global"), opt!(name), global_type)) => {
-                |(_, name, ty)| External::Global(ty)
+            ws!(tuple!(tag!("global"), opt!(id), global_type)) => {
+                |(_, id, ty)| External::Global(ty)
             } |
-            ws!(tuple!(tag!("table"), opt!(name), table_type)) => {
-                |(_, name, ty)| External::Table(ty)
+            ws!(tuple!(tag!("table"), opt!(id), table_type)) => {
+                |(_, id, ty)| External::Table(ty)
             } |
-            ws!(tuple!(tag!("memory"), opt!(name), memory_type)) => {
-                |(_, name, ty)| External::Memory(ty)
+            ws!(tuple!(tag!("memory"), opt!(id), memory_type)) => {
+                |(_, id, ty)| External::Memory(ty)
             }
         ),
         tag!(")")

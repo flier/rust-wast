@@ -48,7 +48,7 @@ named!(
         preceded!(
             first!(tag!("param")),
             alt!(
-                pair!(first!(var), first!(value_type)) => { |(name, vt)| vec![vt] } |
+                pair!(first!(var), first!(value_type)) => { |(id, vt)| vec![vt] } |
                 first!(value_type_list)
             )
         ),
@@ -83,7 +83,7 @@ mod tests {
             (b"(type (func))", (None, FunctionType::new(vec![], None))),
             (
                 b"(type $t (func))",
-                (Some(Var::Name("t".to_owned())), FunctionType::new(vec![], None)),
+                (Some(Var::Id("t".to_owned())), FunctionType::new(vec![], None)),
             ),
             (b"(type (func (param i32)))", (None, FunctionType::new(vec![I32], None))),
             (

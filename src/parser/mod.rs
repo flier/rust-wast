@@ -35,6 +35,6 @@ pub use self::table::table;
 pub use self::type_def::type_def;
 pub use self::types::{elem_type, float_type, func_type, global_type, int_type, limits, memory_type, table_type,
                       value_type, value_type_list};
-pub use self::values::{float, int, name, nat, string, string_list, float32, float64, int32, int64, nat32};
+pub use self::values::{float, id, int, nat, string, string_list, float32, float64, int32, int64, nat32};
 pub use self::var::{bind_var, var, var_list};
 pub use self::whitespace::whitespace;

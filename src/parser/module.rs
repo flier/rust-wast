@@ -41,9 +41,9 @@ impl Resolvable for Var {
     fn resolve(&self, ctxt: &Context) -> Result<Self::Output, Error> {
         match *self {
             Var::Index(index) => Ok(index),
-            Var::Name(ref value) => ctxt.locals
+            Var::Id(ref value) => ctxt.locals
                 .iter()
-                .find(|&(_, name)| name == value)
+                .find(|&(_, id)| id == value)
                 .map(|(idx, _)| idx)
                 .ok_or_else(|| NotFound(value.to_owned()).into()),
         }
@@ -67,10 +67,10 @@ impl Resolvable for Table {
             .map(|elem| {
                 match *elem {
                     Var::Index(idx) => Ok(idx),
-                    Var::Name(ref name) => ctxt.funcs
+                    Var::Id(ref id) => ctxt.funcs
                         .names()
                         .iter()
-                        .position(|(_, ref elem)| *elem == name)
+                        .position(|(_, ref elem)| *elem == id)
                         .map(|idx| idx as u32)
                         .ok_or_else(|| err_msg("undefined element")),
                 }.map(|idx| TableEntryDefinition {
@@ -138,8 +138,8 @@ named_args!(
 
             let type_ref = ctxt.types.get_or_insert(func_type);
 
-            if let Some(Var::Name(name)) = bind {
-                ctxt.typedefs.insert(name, type_ref);
+            if let Some(Var::Id(id)) = bind {
+                ctxt.typedefs.insert(id, type_ref);
             }
         }} |
         global => { |(bind, global)| {
@@ -147,8 +147,8 @@ named_args!(
 
             let global_ref = ctxt.globals.get_or_insert(global);
 
-            if let Some(Var::Name(name)) = bind {
-                ctxt.global_names.insert(name, global_ref);
+            if let Some(Var::Id(id)) = bind {
+                ctxt.global_names.insert(id, global_ref);
             }
         }} |
         table => { |(bind, table)| {
@@ -156,8 +156,8 @@ named_args!(
 
             let table_ref = ctxt.tables.get_or_insert(table);
 
-            if let Some(Var::Name(name)) = bind {
-                ctxt.table_names.insert(name, table_ref);
+            if let Some(Var::Id(id)) = bind {
+                ctxt.table_names.insert(id, table_ref);
             }
         }} |
         elem => { |elem| {
@@ -170,8 +170,8 @@ named_args!(
 
             let mem_ref = ctxt.memories.get_or_insert(memory);
 
-            if let Some(Var::Name(name)) = bind {
-                ctxt.memory_names.insert(name, mem_ref);
+            if let Some(Var::Id(id)) = bind {
+                ctxt.memory_names.insert(id, mem_ref);
             }
         }} |
         data => { |data| {
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn parse_start() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"(start $main)", Var::Name("main".to_owned())),
+            (b"(start $main)", Var::Id("main".to_owned())),
             (b"(start 2)", Var::Index(2)),
         ];
 

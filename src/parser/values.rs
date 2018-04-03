@@ -1,6 +1,6 @@
 use std::{char, str, f32, f64, i32, i64};
-use std::str::FromStr;
 use std::iter::FromIterator;
+use std::str::FromStr;
 
 use nom;
 
@@ -127,10 +127,10 @@ named!(
     map_res!(alt_complete!(tag!("+") | tag!("-")), str::from_utf8)
 );
 
-/// name:   $(<letter> | <digit> | _ | . | + | - | * | / | \ | ^ | ~ | = | < | > | ! | ? | @ | # | $ | % | & | | | : | ' | `)+
+/// id:   $(<letter> | <digit> | _ | . | + | - | * | / | \ | ^ | ~ | = | < | > | ! | ? | @ | # | $ | % | & | | | : | ' | `)+
 named!(
-    pub name<&str>,
-    parsing!(Name,
+    pub id<&str>,
+    parsing!(Id,
         map_res!(
             preceded!(
                 tag!("$"),
@@ -357,7 +357,7 @@ mod tests {
             (
                 b"+a",
                 Error(NodePosition(
-                    Custom(Name as u32),
+                    Custom(Id as u32),
                     &b"+a"[..],
                     vec![Position(Tag, &b"+a"[..])],
                 )),
@@ -365,7 +365,7 @@ mod tests {
         ];
 
         for (code, ref result) in tests {
-            assert_eq!(name(code), *result, "parse name: {}", unsafe {
+            assert_eq!(id(code), *result, "parse id: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

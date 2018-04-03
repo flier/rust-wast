@@ -64,7 +64,7 @@ mod tests {
                     None,
                     Table {
                         table_type: TableType::new(1, Some(1)),
-                        elements: vec![Var::Name("f".to_owned())],
+                        elements: vec![Var::Id("f".to_owned())],
                     },
                 ),
             ),

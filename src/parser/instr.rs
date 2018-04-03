@@ -213,9 +213,9 @@ mod tests {
             (b"unreachable", Done(&[][..], Unreachable)),
             (b"nop", Done(&[][..], Nop)),
             (b"br 123", Done(&[][..], Br(Var::Index(123)))),
-            (b"br $end", Done(&[][..], Br(Var::Name("end".to_owned())))),
+            (b"br $end", Done(&[][..], Br(Var::Id("end".to_owned())))),
             (b"br_if 123", Done(&[][..], BrIf(Var::Index(123)))),
-            (b"br_if $end", Done(&[][..], BrIf(Var::Name("end".to_owned())))),
+            (b"br_if $end", Done(&[][..], BrIf(Var::Id("end".to_owned())))),
             (b"br_table 0", Done(&[][..], BrTable(vec![], Var::Index(0)))),
             (
                 b"br_table 0 1 2 3",
@@ -226,31 +226,22 @@ mod tests {
             ),
             (b"return", Done(&[][..], Return)),
             (b"call 123", Done(&[][..], Call(Var::Index(123)))),
-            (b"call $name", Done(&[][..], Call(Var::Name("name".to_owned())))),
+            (b"call $name", Done(&[][..], Call(Var::Id("name".to_owned())))),
             (b"get_local 123", Done(&[][..], GetLocal(Var::Index(123)))),
-            (
-                b"get_local $name",
-                Done(&[][..], GetLocal(Var::Name("name".to_owned()))),
-            ),
+            (b"get_local $name", Done(&[][..], GetLocal(Var::Id("name".to_owned())))),
             (b"set_local 123", Done(&[][..], SetLocal(Var::Index(123)))),
-            (
-                b"set_local $name",
-                Done(&[][..], SetLocal(Var::Name("name".to_owned()))),
-            ),
+            (b"set_local $name", Done(&[][..], SetLocal(Var::Id("name".to_owned())))),
             (b"tee_local 123", Done(&[][..], TeeLocal(Var::Index(123)))),
-            (
-                b"tee_local $name",
-                Done(&[][..], TeeLocal(Var::Name("name".to_owned()))),
-            ),
+            (b"tee_local $name", Done(&[][..], TeeLocal(Var::Id("name".to_owned())))),
             (b"get_global 123", Done(&[][..], GetGlobal(Var::Index(123)))),
             (
                 b"get_global $name",
-                Done(&[][..], GetGlobal(Var::Name("name".to_owned()))),
+                Done(&[][..], GetGlobal(Var::Id("name".to_owned()))),
             ),
             (b"set_global 123", Done(&[][..], SetGlobal(Var::Index(123)))),
             (
                 b"set_global $name",
-                Done(&[][..], SetGlobal(Var::Name("name".to_owned()))),
+                Done(&[][..], SetGlobal(Var::Id("name".to_owned()))),
             ),
             (b"current_memory", Done(&[][..], CurrentMemory)),
             (b"grow_memory", Done(&[][..], GrowMemory)),
@@ -272,11 +263,11 @@ mod tests {
             ),
             (
                 b"call_indirect $hello",
-                Done(&[][..], CallIndirect(Some(Var::Name("hello".to_owned())), None)),
+                Done(&[][..], CallIndirect(Some(Var::Id("hello".to_owned())), None)),
             ),
             (
                 b"call_indirect (type $hello)",
-                Done(&[][..], CallIndirect(Some(Var::Name("hello".to_owned())), None)),
+                Done(&[][..], CallIndirect(Some(Var::Id("hello".to_owned())), None)),
             ),
             (
                 b"call_indirect (param i32)",

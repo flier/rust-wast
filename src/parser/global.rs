@@ -65,7 +65,7 @@ mod tests {
             (
                 b"(global $a i32 (i32.const -2))",
                 (
-                    Some(Var::Name("a".to_owned())),
+                    Some(Var::Id("a".to_owned())),
                     Global::new(GlobalType::new(I32, false), InitExpr::new(vec![I32Const(-2)])),
                 ),
             ),
@@ -92,14 +92,14 @@ mod tests {
             (
                 b"(global $b i64 (i64.const -5))",
                 (
-                    Some(Var::Name("b".to_owned())),
+                    Some(Var::Id("b".to_owned())),
                     Global::new(GlobalType::new(I64, false), InitExpr::new(vec![I64Const(-5)])),
                 ),
             ),
             (
                 b"(global $x (mut i32) (i32.const -12))",
                 (
-                    Some(Var::Name("x".to_owned())),
+                    Some(Var::Id("x".to_owned())),
                     Global::new(GlobalType::new(I32, true), InitExpr::new(vec![I32Const(-12)])),
                 ),
             ),
@@ -126,7 +126,7 @@ mod tests {
             (
                 b"(global $y (mut i64) (i64.const -15))",
                 (
-                    Some(Var::Name("y".to_owned())),
+                    Some(Var::Id("y".to_owned())),
                     Global::new(GlobalType::new(I64, true), InitExpr::new(vec![I64Const(-15)])),
                 ),
             ),

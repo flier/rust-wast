@@ -22,7 +22,7 @@ pub enum Parsing {
     Int32,
     Int64,
     Floating,
-    Name,
+    Id,
     Str,
     Value,
     Var,
@@ -61,7 +61,7 @@ lazy_static! {
         values.insert(Parsing::Int32 as u32, "int32");
         values.insert(Parsing::Int64 as u32, "int64");
         values.insert(Parsing::Floating as u32, "float");
-        values.insert(Parsing::Name as u32, "name");
+        values.insert(Parsing::Id as u32, "id");
         values.insert(Parsing::Str as u32, "str");
         values.insert(Parsing::Value as u32, "value");
         values.insert(Parsing::Var as u32, "var");

@@ -112,7 +112,7 @@ mod tests {
             (
                 br#"(data $m (i32.const 0))"#,
                 Data {
-                    mem_index: Var::Name("m".to_owned()),
+                    mem_index: Var::Id("m".to_owned()),
                     offset: InitExpr::new(vec![I32Const(0)]),
                     value: vec![],
                 },
@@ -120,7 +120,7 @@ mod tests {
             (
                 br#"(data $m (i32.const 1) "a" "" "bcd")"#,
                 Data {
-                    mem_index: Var::Name("m".to_owned()),
+                    mem_index: Var::Id("m".to_owned()),
                     offset: InitExpr::new(vec![I32Const(1)]),
                     value: b"abcd".to_vec(),
                 },
@@ -128,7 +128,7 @@ mod tests {
             (
                 br#"(data $m (offset (i32.const 0)))"#,
                 Data {
-                    mem_index: Var::Name("m".to_owned()),
+                    mem_index: Var::Id("m".to_owned()),
                     offset: InitExpr::new(vec![I32Const(0)]),
                     value: vec![],
                 },
@@ -136,7 +136,7 @@ mod tests {
             (
                 br#"(data $m (offset (i32.const 0)) "" "a" "bc" "")"#,
                 Data {
-                    mem_index: Var::Name("m".to_owned()),
+                    mem_index: Var::Id("m".to_owned()),
                     offset: InitExpr::new(vec![I32Const(0)]),
                     value: b"abc".to_vec(),
                 },

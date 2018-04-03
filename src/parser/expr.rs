@@ -130,10 +130,10 @@ mod tests {
                         Block(
                             BlockType::NoResult,
                             vec![
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
                             ],
                         ),
                     ],
@@ -153,14 +153,14 @@ mod tests {
                                 Block(
                                     BlockType::NoResult,
                                     vec![
-                                        Call(Var::Name("dummy".to_owned())),
+                                        Call(Var::Id("dummy".to_owned())),
                                         Block(BlockType::NoResult, vec![]),
                                         Nop,
                                     ],
                                 ),
                                 Block(
                                     BlockType::Value(I32),
-                                    vec![Call(Var::Name("dummy".to_owned())), Const(Constant::I32(9))],
+                                    vec![Call(Var::Id("dummy".to_owned())), Const(Constant::I32(9))],
                                 ),
                             ],
                         ),
@@ -225,9 +225,9 @@ mod tests {
                         If(
                             BlockType::NoResult,
                             vec![
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
                             ],
                             vec![],
                         ),
@@ -244,9 +244,9 @@ mod tests {
                             BlockType::NoResult,
                             vec![],
                             vec![
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
                             ],
                         ),
                     ],
@@ -264,13 +264,13 @@ mod tests {
                         If(
                             BlockType::Value(I32),
                             vec![
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
                                 Instr::i32(8),
                             ],
                             vec![
-                                Call(Var::Name("dummy".to_owned())),
-                                Call(Var::Name("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
+                                Call(Var::Id("dummy".to_owned())),
                                 Instr::i32(9),
                             ],
                         ),
@@ -307,7 +307,7 @@ mod tests {
                                 If(
                                     BlockType::NoResult,
                                     vec![
-                                        Call(Var::Name("dummy".to_owned())),
+                                        Call(Var::Id("dummy".to_owned())),
                                         Block(BlockType::NoResult, vec![]),
                                         Nop,
                                     ],
@@ -318,7 +318,7 @@ mod tests {
                                     BlockType::NoResult,
                                     vec![],
                                     vec![
-                                        Call(Var::Name("dummy".to_owned())),
+                                        Call(Var::Id("dummy".to_owned())),
                                         Block(BlockType::NoResult, vec![]),
                                         Nop,
                                     ],
@@ -326,8 +326,8 @@ mod tests {
                                 GetLocal(Var::Index(1)),
                                 If(
                                     BlockType::Value(I32),
-                                    vec![Call(Var::Name("dummy".to_owned())), Instr::i32(9)],
-                                    vec![Call(Var::Name("dummy".to_owned())), Instr::i32(10)],
+                                    vec![Call(Var::Id("dummy".to_owned())), Instr::i32(9)],
+                                    vec![Call(Var::Id("dummy".to_owned())), Instr::i32(10)],
                                 ),
                             ],
                             vec![
@@ -335,7 +335,7 @@ mod tests {
                                 If(
                                     BlockType::NoResult,
                                     vec![
-                                        Call(Var::Name("dummy".to_owned())),
+                                        Call(Var::Id("dummy".to_owned())),
                                         Block(BlockType::NoResult, vec![]),
                                         Nop,
                                     ],
@@ -346,7 +346,7 @@ mod tests {
                                     BlockType::NoResult,
                                     vec![],
                                     vec![
-                                        Call(Var::Name("dummy".to_owned())),
+                                        Call(Var::Id("dummy".to_owned())),
                                         Block(BlockType::NoResult, vec![]),
                                         Nop,
                                     ],
@@ -354,8 +354,8 @@ mod tests {
                                 GetLocal(Var::Index(1)),
                                 If(
                                     BlockType::Value(I32),
-                                    vec![Call(Var::Name("dummy".to_owned())), Instr::i32(10)],
-                                    vec![Call(Var::Name("dummy".to_owned())), Instr::i32(11)],
+                                    vec![Call(Var::Id("dummy".to_owned())), Instr::i32(10)],
+                                    vec![Call(Var::Id("dummy".to_owned())), Instr::i32(11)],
                                 ),
                             ],
                         ),

@@ -5,7 +5,7 @@ use parity_wasm::elements::{BlockType, FunctionType, GlobalType, InitExpr, Memor
 #[derive(Clone, Debug, PartialEq)]
 pub enum Var {
     Index(u32),
-    Name(String),
+    Id(String),
 }
 
 impl Var {
@@ -13,8 +13,8 @@ impl Var {
         Var::Index(v)
     }
 
-    pub fn name<S: Into<String>>(s: S) -> Self {
-        Var::Name(s.into())
+    pub fn id<S: Into<String>>(s: S) -> Self {
+        Var::Id(s.into())
     }
 }
 

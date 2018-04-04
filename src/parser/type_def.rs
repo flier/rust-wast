@@ -1,6 +1,6 @@
-use parity_wasm::elements::{FunctionType, ValueType};
+use parity_wasm::elements::FunctionType;
 
-use super::{opt_bind_var, value_type, value_type_list, var, FUNC, LPAR, PARAM, RESULT, RPAR, TYPE};
+use super::{func_type, opt_bind_var, FUNC, LPAR, RPAR, TYPE};
 use ast::Var;
 
 named!(
@@ -17,43 +17,9 @@ named!(
 
 named!(
     def_type<FunctionType>,
-    map!(delimited!(LPAR, preceded!(FUNC, opt!(first!(func_type))), RPAR), |ft| {
+    map!(delimited!(LPAR, preceded!(FUNC, func_type), RPAR), |ft| {
         ft.unwrap_or_default()
     })
-);
-
-named!(
-    func_type<FunctionType>,
-    parsing!(
-        FuncType,
-        map!(
-            pair!(many0!(first!(param)), opt!(complete!(first!(result)))),
-            |(params, result_type)| FunctionType::new(
-                params.into_iter().flat_map(|param| param).collect(),
-                result_type.unwrap_or_default()
-            )
-        )
-    )
-);
-
-named!(
-    param<Vec<ValueType>>,
-    delimited!(
-        LPAR,
-        preceded!(
-            PARAM,
-            alt!(
-                pair!(first!(var), first!(value_type)) => { |(id, vt)| vec![vt] } |
-                value_type_list
-            )
-        ),
-        RPAR
-    )
-);
-
-named!(
-    result<Option<ValueType>>,
-    delimited!(LPAR, preceded!(RESULT, opt!(first!(value_type))), RPAR)
 );
 
 #[cfg(test)]

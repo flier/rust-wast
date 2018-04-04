@@ -1,6 +1,6 @@
 use parity_wasm::elements::TableType;
 
-use super::{opt_bind_var, elem_type, inline_export, inline_import, table_type, var_list, ELEM, LPAR, RPAR, TABLE};
+use super::{elem_type, inline_export, inline_import, opt_bind_var, table_type, var_list, ELEM, LPAR, RPAR, TABLE};
 use ast::{Table, Var};
 
 named!(

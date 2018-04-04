@@ -83,17 +83,17 @@ named!(offset<u32>, map!(preceded!(pair!(OFFSET, EQ), nat32), |n| n as u32));
 
 /// align: align=(1|2|4|8|...)
 named!(
-	align<u32>,
-	verify!(map!(preceded!(pair!(ALIGN, EQ), nat32), |n| n as u32), |n: u32| n == 0
-		|| n.is_power_of_two())
+    align<u32>,
+    verify!(map!(preceded!(pair!(ALIGN, EQ), nat32), |n| n as u32), |n: u32| n == 0
+        || n.is_power_of_two())
 );
 
 named!(
-	mem_size<usize>,
-	map_res!(
-		map_res!(first!(alt!(tag!("8") | tag!("16") | tag!("32"))), str::from_utf8),
-		usize::from_str
-	)
+    mem_size<usize>,
+    map_res!(
+        map_res!(first!(alt!(tag!("8") | tag!("16") | tag!("32"))), str::from_utf8),
+        usize::from_str
+    )
 );
 
 /// sign:  s|u
@@ -141,11 +141,11 @@ named!(
 );
 
 named!(
-	unop,
-	alt!(
-		tag!("clz") | tag!("ctz") | tag!("popcnt") | tag!("abs") | tag!("neg") | tag!("sqrt") | tag!("ceil")
-			| tag!("floor") | tag!("trunc") | tag!("nearest")
-	)
+    unop,
+    alt!(
+        tag!("clz") | tag!("ctz") | tag!("popcnt") | tag!("abs") | tag!("neg") | tag!("sqrt") | tag!("ceil")
+            | tag!("floor") | tag!("trunc") | tag!("nearest")
+    )
 );
 
 /// <val_type>.<binop>

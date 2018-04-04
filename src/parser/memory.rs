@@ -1,6 +1,6 @@
 use parity_wasm::elements::MemoryType;
 
-use super::{opt_bind_var, inline_export, inline_import, memory_type, string_list, DATA, LPAR, MEMORY, RPAR};
+use super::{inline_export, inline_import, memory_type, opt_bind_var, string_list, DATA, LPAR, MEMORY, RPAR};
 use ast::{Memory, Var};
 
 named!(

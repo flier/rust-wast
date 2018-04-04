@@ -70,17 +70,10 @@ named!(
 
 named!(
     call_instr_type<Instr>,
-    alt!(
-        var => { |var| Instr::CallIndirect(Some(var),  None) } |
-        pair!(opt!(first!(type_use)), first!(func_type)) => {
-            |(type_use, func_type)| Instr::CallIndirect(type_use, func_type)
-        }
+    alt_complete!(
+        typeidx  => { |var| Instr::CallIndirect(Some(var),  None) } |
+        typeuse => { |(type_use, func_type)| Instr::CallIndirect(type_use, func_type) }
     )
-);
-
-named!(
-    pub type_use<Var>,
-    delimited!(LPAR, preceded!(TYPE, first!(var)), RPAR)
 );
 
 named!(

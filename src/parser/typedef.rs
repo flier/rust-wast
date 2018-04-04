@@ -4,7 +4,7 @@ use super::{func_type, opt_bind_var, FUNC, LPAR, RPAR, TYPE};
 use ast::Var;
 
 named!(
-    pub type_def<(Option<Var>, FunctionType)>,
+    pub typedef<(Option<Var>, FunctionType)>,
     parsing!(
         TypeDef,
         delimited!(
@@ -91,7 +91,7 @@ mod tests {
 
         for (code, ref func_type) in tests {
             assert_eq!(
-                type_def(code),
+                typedef(code),
                 Done(&[][..], func_type.clone()),
                 "parse typedef: {}",
                 unsafe { str::from_utf8_unchecked(code) },

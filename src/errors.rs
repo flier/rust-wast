@@ -37,6 +37,7 @@ pub enum Parsing {
     IfBlock,
     FuncType,
     TypeDef,
+    TypeUse,
     Global,
     Table,
     Memory,
@@ -78,6 +79,7 @@ lazy_static! {
         values.insert(Parsing::IfBlock as u32, "if_block");
         values.insert(Parsing::FuncType as u32, "func_type");
         values.insert(Parsing::TypeDef as u32, "typedef");
+        values.insert(Parsing::TypeUse as u32, "typeuse");
         values.insert(Parsing::Global as u32, "global");
         values.insert(Parsing::Table as u32, "table");
         values.insert(Parsing::Memory as u32, "memory");

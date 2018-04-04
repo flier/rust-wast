@@ -7,7 +7,7 @@ use parity_wasm::builder::{signature, ModuleBuilder, TableDefinition, TableEntry
 use parity_wasm::elements::{FunctionNameSection, FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type,
                             TypeSection};
 
-use super::{data, elem, global, memory, table, type_def, var, LPAR, MODULE, RPAR, START};
+use super::{data, elem, global, memory, table, typedef, var, LPAR, MODULE, RPAR, START};
 use ast::{Data, Elem, Global, Memory, Table, Var};
 use errors::WastError::NotFound;
 
@@ -190,7 +190,7 @@ pub fn module(input: &[u8]) -> IResult<&[u8], Module> {
 named_args!(
     module_field<'a>(ctxt: &'a mut Context)<()>,
     alt!(
-        type_def => { |(bind, func_type)| {
+        typedef => { |(bind, func_type)| {
             trace!("typedef {:?} = {:?}", bind, func_type);
 
             let type_ref = ctxt.types.get_or_insert(func_type);

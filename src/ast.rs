@@ -101,11 +101,11 @@ pub enum Instr {
     /// do nothing
     Nop,
     /// execute in sequence
-    Block(BlockType, Vec<Instr>),
+    Block(Option<String>, BlockType, Vec<Instr>),
     /// loop header
-    Loop(BlockType, Vec<Instr>),
+    Loop(Option<String>, BlockType, Vec<Instr>),
     /// conditional
-    If(BlockType, Vec<Instr>, Vec<Instr>),
+    If(Option<String>, BlockType, Vec<Instr>, Vec<Instr>),
     /// break to n-th surrounding label
     Br(Var),
     /// conditional break
@@ -152,6 +152,10 @@ pub enum Instr {
     Binary(Opcode),
     /// conversion
     Convert(Opcode),
+}
+
+pub fn empty_block() -> Instr {
+    Instr::Block(None, BlockType::NoResult, vec![])
 }
 
 impl Instr {

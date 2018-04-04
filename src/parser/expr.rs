@@ -2,7 +2,7 @@ use failure::Error;
 use itertools;
 use parity_wasm::elements::{BlockType, InitExpr, Opcode};
 
-use super::{block, block_type, call_instr, instr_list, plain_instr, var};
+use super::{block, block_type, call_instr, instr_list, label, plain_instr};
 use ast::Instr;
 
 named!(
@@ -23,18 +23,23 @@ named!(
                 call_instr => {
                     |instr| vec![instr]
                 } |
-                tuple!(tag!("block"), opt!(first!(var)), first!(block)) => {
-                    |(_, label, (block_type, instrs))| vec![Instr::Block(block_type, instrs)]
+                preceded!(tag!("block"), tuple!(label, first!(block))) => { |(label, (result_type, instrs))|
+                    vec![Instr::Block(label, result_type, instrs)]
                 } |
-                tuple!(tag!("loop"), opt!(first!(var)), first!(block)) => {
-                    |(_, label, (block_type, instrs))| vec![Instr::Loop(block_type, instrs)]
+                preceded!(tag!("loop"), tuple!(label, first!(block))) => { |(label, (result_type, instrs))|
+                    vec![Instr::Loop(label, result_type, instrs)]
                 } |
-                tuple!(tag!("if"), opt!(first!(var)), first!(if_block)) => {
-                    |(_, label, (mut cond, block_type, then, else_))| {
+                preceded!(tag!("if"), tuple!(label, first!(if_block))) => {
+                    |(label, (mut cond_instrs, result_type, then_instrs, else_instrs))| {
                         let mut instrs = vec![];
 
-                        instrs.append(&mut cond);
-                        instrs.push(Instr::If(block_type, then, else_));
+                        instrs.append(&mut cond_instrs);
+                        instrs.push(Instr::If(
+                            label,
+                            result_type,
+                            then_instrs,
+                            else_instrs,
+                        ));
 
                         instrs
                     }
@@ -50,7 +55,7 @@ named!(
     parsing!(
         IfBlock,
         map!(
-            pair!(opt!(block_type), first!(if_)),
+            pair!(opt!(complete!(first!(block_type))), first!(if_)),
             |(block_type, (cond, then, else_))| (
                 cond,
                 block_type.map_or(BlockType::NoResult, BlockType::Value),
@@ -65,11 +70,15 @@ named!(
     if_<(Vec<Instr>, Vec<Instr>, Option<Vec<Instr>>)>,
     ws!(tuple!(
         first!(expr),
-        delimited!(tag!("("), preceded!(tag!("then"), first!(instr_list)), tag!(")")),
+        delimited!(
+            first!(tag!("(")),
+            preceded!(first!(tag!("then")), first!(instr_list)),
+            first!(tag!(")"))
+        ),
         opt!(delimited!(
-            tag!("("),
-            preceded!(tag!("else"), first!(instr_list)),
-            tag!(")")
+            first!(tag!("(")),
+            preceded!(first!(tag!("else")), first!(instr_list)),
+            first!(tag!(")"))
         ))
     ))
 );
@@ -106,21 +115,24 @@ mod tests {
     use parity_wasm::elements::ValueType::*;
 
     use super::*;
-    use ast::{Constant, Var};
+    use ast::{empty_block, Constant, Var};
     use ast::Instr::*;
 
     #[test]
     fn parse_expr() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"(block)", Done(&[][..], vec![Block(BlockType::NoResult, vec![])])),
-            (b"(block $l)", Done(&[][..], vec![Block(BlockType::NoResult, vec![])])),
+            (b"(block)", Done(&[][..], vec![empty_block()])),
+            (
+                b"(block $l)",
+                Done(&[][..], vec![Block(Some("l".to_owned()), BlockType::NoResult, vec![])]),
+            ),
             (
                 b"(block (nop))",
-                Done(&[][..], vec![Block(BlockType::NoResult, vec![Nop])]),
+                Done(&[][..], vec![Block(None, BlockType::NoResult, vec![Nop])]),
             ),
             (
                 b"(block (result i32) (i32.const 7))",
-                Done(&[][..], vec![Block(BlockType::Value(I32), vec![Instr::i32(7)])]),
+                Done(&[][..], vec![Block(None, BlockType::Value(I32), vec![Instr::i32(7)])]),
             ),
             (
                 b"(block (call $dummy) (call $dummy) (call $dummy) (call $dummy))",
@@ -128,6 +140,7 @@ mod tests {
                     &[][..],
                     vec![
                         Block(
+                            None,
                             BlockType::NoResult,
                             vec![
                                 Call(Var::Id("dummy".to_owned())),
@@ -148,17 +161,16 @@ mod tests {
                     &[][..],
                     vec![
                         Block(
+                            None,
                             BlockType::Value(I32),
                             vec![
                                 Block(
+                                    None,
                                     BlockType::NoResult,
-                                    vec![
-                                        Call(Var::Id("dummy".to_owned())),
-                                        Block(BlockType::NoResult, vec![]),
-                                        Nop,
-                                    ],
+                                    vec![Call(Var::Id("dummy".to_owned())), empty_block(), Nop],
                                 ),
                                 Block(
+                                    None,
                                     BlockType::Value(I32),
                                     vec![Call(Var::Id("dummy".to_owned())), Const(Constant::I32(9))],
                                 ),
@@ -171,49 +183,70 @@ mod tests {
                 b"(if (get_local 0) (then))",
                 Done(
                     &[][..],
-                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![], vec![])],
+                    vec![
+                        GetLocal(Var::Index(0)),
+                        If(None, BlockType::NoResult, Default::default(), Default::default()),
+                    ],
                 ),
             ),
             (
                 b"(if (get_local 0) (then) (else))",
                 Done(
                     &[][..],
-                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![], vec![])],
+                    vec![
+                        GetLocal(Var::Index(0)),
+                        If(None, BlockType::NoResult, Default::default(), Default::default()),
+                    ],
                 ),
             ),
             (
                 b"(if $l (get_local 0) (then))",
                 Done(
                     &[][..],
-                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![], vec![])],
+                    vec![
+                        GetLocal(Var::Index(0)),
+                        If(Some("l".to_owned()), BlockType::NoResult, vec![], Default::default()),
+                    ],
                 ),
             ),
             (
                 b"(if $l (get_local 0) (then) (else))",
                 Done(
                     &[][..],
-                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![], vec![])],
+                    vec![
+                        GetLocal(Var::Index(0)),
+                        If(Some("l".to_owned()), BlockType::NoResult, vec![], Default::default()),
+                    ],
                 ),
             ),
             (
                 b"(if (get_local 0) (then (nop)))",
                 Done(
                     &[][..],
-                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![Nop], vec![])],
+                    vec![
+                        GetLocal(Var::Index(0)),
+                        If(None, BlockType::NoResult, vec![Nop], Default::default()),
+                    ],
                 ),
             ),
             (
                 b"(if (get_local 0) (then (nop)) (else (nop)))",
                 Done(
                     &[][..],
-                    vec![GetLocal(Var::Index(0)), If(BlockType::NoResult, vec![Nop], vec![Nop])],
+                    vec![
+                        GetLocal(Var::Index(0)),
+                        If(None, BlockType::NoResult, vec![Nop], vec![Nop]),
+                    ],
                 ),
             ),
             (
                 b"(if (result i32) (get_local 0) (then (nop)) (else (nop)))",
                 Done(
                     &[][..],
-                    vec![GetLocal(Var::Index(0)), If(BlockType::Value(I32), vec![Nop], vec![Nop])],
+                    vec![
+                        GetLocal(Var::Index(0)),
+                        If(None, BlockType::Value(I32), vec![Nop], vec![Nop]),
+                    ],
                 ),
             ),
             (
@@ -223,13 +256,14 @@ mod tests {
                     vec![
                         GetLocal(Var::Index(0)),
                         If(
+                            None,
                             BlockType::NoResult,
                             vec![
                                 Call(Var::Id("dummy".to_owned())),
                                 Call(Var::Id("dummy".to_owned())),
                                 Call(Var::Id("dummy".to_owned())),
                             ],
-                            vec![],
+                            Default::default(),
                         ),
                     ],
                 ),
@@ -241,8 +275,9 @@ mod tests {
                     vec![
                         GetLocal(Var::Index(0)),
                         If(
+                            None,
                             BlockType::NoResult,
-                            vec![],
+                            Default::default(),
                             vec![
                                 Call(Var::Id("dummy".to_owned())),
                                 Call(Var::Id("dummy".to_owned())),
@@ -262,6 +297,7 @@ mod tests {
                     vec![
                         GetLocal(Var::Index(0)),
                         If(
+                            None,
                             BlockType::Value(I32),
                             vec![
                                 Call(Var::Id("dummy".to_owned())),
@@ -301,30 +337,26 @@ mod tests {
                     vec![
                         GetLocal(Var::Index(0)),
                         If(
+                            None,
                             BlockType::Value(I32),
                             vec![
                                 GetLocal(Var::Index(1)),
                                 If(
+                                    None,
                                     BlockType::NoResult,
-                                    vec![
-                                        Call(Var::Id("dummy".to_owned())),
-                                        Block(BlockType::NoResult, vec![]),
-                                        Nop,
-                                    ],
-                                    vec![],
+                                    vec![Call(Var::Id("dummy".to_owned())), empty_block(), Nop],
+                                    Default::default(),
                                 ),
                                 GetLocal(Var::Index(1)),
                                 If(
+                                    None,
                                     BlockType::NoResult,
-                                    vec![],
-                                    vec![
-                                        Call(Var::Id("dummy".to_owned())),
-                                        Block(BlockType::NoResult, vec![]),
-                                        Nop,
-                                    ],
+                                    Default::default(),
+                                    vec![Call(Var::Id("dummy".to_owned())), empty_block(), Nop],
                                 ),
                                 GetLocal(Var::Index(1)),
                                 If(
+                                    None,
                                     BlockType::Value(I32),
                                     vec![Call(Var::Id("dummy".to_owned())), Instr::i32(9)],
                                     vec![Call(Var::Id("dummy".to_owned())), Instr::i32(10)],
@@ -333,26 +365,21 @@ mod tests {
                             vec![
                                 GetLocal(Var::Index(1)),
                                 If(
+                                    None,
                                     BlockType::NoResult,
-                                    vec![
-                                        Call(Var::Id("dummy".to_owned())),
-                                        Block(BlockType::NoResult, vec![]),
-                                        Nop,
-                                    ],
-                                    vec![],
+                                    vec![Call(Var::Id("dummy".to_owned())), empty_block(), Nop],
+                                    Default::default(),
                                 ),
                                 GetLocal(Var::Index(1)),
                                 If(
+                                    None,
                                     BlockType::NoResult,
-                                    vec![],
-                                    vec![
-                                        Call(Var::Id("dummy".to_owned())),
-                                        Block(BlockType::NoResult, vec![]),
-                                        Nop,
-                                    ],
+                                    Default::default(),
+                                    vec![Call(Var::Id("dummy".to_owned())), empty_block(), Nop],
                                 ),
                                 GetLocal(Var::Index(1)),
                                 If(
+                                    None,
                                     BlockType::Value(I32),
                                     vec![Call(Var::Id("dummy".to_owned())), Instr::i32(10)],
                                     vec![Call(Var::Id("dummy".to_owned())), Instr::i32(11)],

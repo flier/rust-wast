@@ -1,25 +1,27 @@
 use itertools;
 use parity_wasm::elements::{BlockType, ValueType};
 
-use super::{align, binary, compare, convert, expr, func_type, mem_size, sign, test, unary, value_type, var, float32,
-            float64, int32, int64, nat32};
+use super::{align, binary, compare, convert, expr, func_type, id, mem_size, sign, test, unary, value_type, var,
+            float32, float64, int32, int64, nat32};
 use ast::{Constant, Instr, Load, Store, Var};
+
+named!(pub label<Option<String>>, opt!(complete!(map!(first!(id), |s| s.to_owned()))));
 
 named!(
     pub instr_list<Vec<Instr>>,
-    map!(ws!(many0!(first!(instr))), |instrs| itertools::flatten(instrs).collect())
+    map!(many0!(first!(instr)), |instrs| itertools::flatten(instrs).collect())
 );
 
 named!(
     pub instr<Vec<Instr>>,
     parsing!(
         Instr,
-        ws!(alt!(
+        alt!(
             plain_instr => { |instr| vec![instr] } |
             call_instr => { |instr| vec![instr] } |
             block_instr => { |instr| vec![instr] } |
             expr
-        ))
+        )
     )
 );
 
@@ -30,9 +32,9 @@ named!(
         alt_complete!(
             tag!("unreachable") => { |_| Instr::Unreachable } |
             tag!("nop") => { |_| Instr::Nop } |
-            ws!(preceded!(tag!("br"), var)) => { |var| Instr::Br(var) } |
-            ws!(preceded!(tag!("br_if"), var)) => { |var| Instr::BrIf(var) } |
-            ws!(preceded!(tag!("br_table"), pair!(var, many0!(var)))) => {
+            preceded!(tag!("br"), first!(var)) => { |var| Instr::Br(var) } |
+            preceded!(tag!("br_if"), first!(var)) => { |var| Instr::BrIf(var) } |
+            preceded!(tag!("br_table"), pair!(first!(var), many0!(first!(var)))) => {
                 |(default, targets)| Instr::BrTable(targets, default)
             } |
             tag!("return") => { |_| Instr::Return } |
@@ -78,30 +80,49 @@ named!(
     ws!(delimited!(tag!("("), preceded!(tag!("type"), var), tag!(")")))
 );
 
-// named!(call_instr_instr<Instr>, tag!(""));
-
 named!(
     block_instr<Instr>,
     parsing!(
         BlockInstr,
-        ws!(alt_complete!(
-            tuple!(tag!("block"), opt!(first!(var)), first!(block), tag!("end"), opt!(first!(var))) => {
-                |(_, _, (block_type, instrs), _, _)| Instr::Block(block_type, instrs)
+        alt!(
+            preceded!(tag!("block"), tuple!(label, first!(block), first!(tag!("end")), label)) =>
+            { |(label, (result_type, instrs), _, end_label)|
+                Instr::Block(
+                    label,
+                    result_type,
+                    instrs,
+                )
             } |
-            tuple!(tag!("loop"), opt!(first!(var)), first!(block), tag!("end"), opt!(first!(var))) => {
-                |(_, _, (block_type, instrs), _, _)| Instr::Loop(block_type, instrs)
+            preceded!(tag!("loop"), tuple!(label, first!(block), first!(tag!("end")), label)) =>
+            { |(label, (result_type, instrs), _, end_label)|
+                Instr::Loop(
+                    label,
+                    result_type,
+                    instrs
+                )
             } |
-            tuple!(tag!("if"), opt!(first!(var)), first!(block), tag!("end"), opt!(first!(var))) => {
-                |(_, _, (block_type, then), _, _)| Instr::If(block_type, then, vec![])
+            preceded!(tag!("if"), tuple!(label, first!(block), first!(tag!("end")), label)) =>
+            { |(label, (result_type, then_instrs), _, end_label)|
+                Instr::If(
+                    label,
+                    result_type,
+                    then_instrs,
+                    vec![],
+                )
             } |
             tuple!(
-                tag!("if"), opt!(first!(var)), first!(block),
-                tag!("else"), opt!(first!(var)), instr_list,
-                tag!("end"), opt!(first!(var))
-            ) => {
-                |(_, _, (block_type, then), _, _, else_, _, _)| Instr::If(block_type, then, else_)
+                preceded!(tag!("if"), tuple!(label, first!(block))),
+                preceded!(first!(tag!("else")), tuple!(label, instr_list)),
+                preceded!(first!(tag!("end")), label)
+            ) => { |((label, (block_type, then_instrs)), (else_label, else_instrs), end_label)|
+                Instr::If(
+                    label,
+                    block_type,
+                    then_instrs,
+                    else_instrs,
+                )
             }
-        ))
+        )
     )
 );
 
@@ -110,7 +131,7 @@ named!(
     parsing!(
         Block,
         map!(
-            pair!(opt!(first!(block_type)), first!(instr_list)),
+            pair!(opt!(complete!(first!(block_type))), first!(instr_list)),
             |(block_type, instrs)| (block_type.map_or(BlockType::NoResult, BlockType::Value), instrs)
         )
     )
@@ -204,8 +225,8 @@ mod tests {
     use parity_wasm::elements::{FunctionType, ValueType::*};
 
     use super::*;
+    use ast::{empty_block, Var};
     use ast::Instr::*;
-    use ast::Var;
 
     #[test]
     fn parse_plain_instr() {
@@ -296,39 +317,61 @@ mod tests {
     #[test]
     fn parse_block_instr() {
         let tests: Vec<(&[u8], _)> = vec![
-            (b"block\nend", Done(&[][..], Block(BlockType::NoResult, vec![]))),
+            (b"block\nend", Done(&[][..], empty_block())),
             (
                 b"block (result i32)\nend",
-                Done(&[][..], Block(BlockType::Value(I32), vec![])),
+                Done(&[][..], Block(None, BlockType::Value(I32), vec![])),
             ),
             (
                 b"block $done\nend $done",
-                Done(&[][..], Block(BlockType::NoResult, vec![])),
+                Done(&[][..], Block(Some("done".to_owned()), BlockType::NoResult, vec![])),
             ),
             (
                 b"block $done (result i32)\nend $done",
-                Done(&[][..], Block(BlockType::Value(I32), vec![])),
+                Done(&[][..], Block(Some("done".to_owned()), BlockType::Value(I32), vec![])),
             ),
             (
                 b"block $done (result i32) nop\nend $done",
-                Done(&[][..], Block(BlockType::Value(I32), vec![Nop])),
+                Done(
+                    &[][..],
+                    Block(Some("done".to_owned()), BlockType::Value(I32), vec![Nop]),
+                ),
             ),
             (
                 b"loop $done (result i32) unreachable\nend $done",
-                Done(&[][..], Loop(BlockType::Value(I32), vec![Unreachable])),
+                Done(
+                    &[][..],
+                    Loop(Some("done".to_owned()), BlockType::Value(I32), vec![Unreachable]),
+                ),
             ),
             (
                 b"if $done (result i32) nop unreachable\nend $done",
-                Done(&[][..], If(BlockType::Value(I32), vec![Nop, Unreachable], vec![])),
+                Done(
+                    &[][..],
+                    If(
+                        Some("done".to_owned()),
+                        BlockType::Value(I32),
+                        vec![Nop, Unreachable],
+                        vec![],
+                    ),
+                ),
             ),
             (
                 b"if $done (result i32) nop\nelse unreachable\nend $done",
-                Done(&[][..], If(BlockType::Value(I32), vec![Nop], vec![Unreachable])),
+                Done(
+                    &[][..],
+                    If(
+                        Some("done".to_owned()),
+                        BlockType::Value(I32),
+                        vec![Nop],
+                        vec![Unreachable],
+                    ),
+                ),
             ),
         ];
 
         for &(code, ref result) in tests.iter() {
-            assert_eq!(block_instr(code), *result, "parse instr: {}", unsafe {
+            assert_eq!(block_instr(code), *result, "parse block_instr: {}", unsafe {
                 str::from_utf8_unchecked(code)
             });
         }

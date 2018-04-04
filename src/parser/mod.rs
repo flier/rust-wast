@@ -26,7 +26,7 @@ pub use self::export::inline_export;
 pub use self::expr::{expr, expr_list, init_expr, offset};
 pub use self::global::global;
 pub use self::import::inline_import;
-pub use self::instr::{block, block_type, call_instr, instr_list, plain_instr, type_use};
+pub use self::instr::{block, block_type, call_instr, instr_list, label, plain_instr, type_use};
 pub use self::memory::memory;
 pub use self::module::module;
 pub use self::ops::{align, binary, compare, convert, mem_size, sign, test, unary};

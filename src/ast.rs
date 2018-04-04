@@ -34,6 +34,20 @@ pub enum ImportDesc {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct Export {
+    pub name: String,
+    pub desc: ExportDesc,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExportDesc {
+    Function(Var),
+    Table(Var),
+    Memory(Var),
+    Global(Var),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Global {
     pub global_type: GlobalType,
     pub init_expr: InitExpr,

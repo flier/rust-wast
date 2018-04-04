@@ -24,7 +24,7 @@ mod module;
 pub use self::comment::comment;
 pub use self::data::data;
 pub use self::elem::elem;
-pub use self::export::inline_export;
+pub use self::export::{export, inline_export};
 pub use self::expr::{expr, expr_list, init_expr, offset};
 pub use self::global::global;
 pub use self::import::{import, inline_import};

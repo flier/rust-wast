@@ -16,7 +16,7 @@ named!(
     map!(
         delimited!(
             LPAR,
-            preceded!(IMPORT, tuple!(first!(string), first!(string), first!(importdesc))),
+            preceded!(IMPORT, tuple!(first!(string), first!(string), first!(import_desc))),
             RPAR
         ),
         |(module, name, (id, desc))| (id, Import { module, name, desc })
@@ -24,10 +24,10 @@ named!(
 );
 
 named!(
-    importdesc<(Option<Var>, ImportDesc)>,
+    import_desc<(Option<Var>, ImportDesc)>,
     delimited!(
         LPAR,
-        alt!(
+        alt_complete!(
             preceded!(FUNC, pair!(opt_bind_var, typeuse)) => {
                 |(bind, (type_use, func_type))| (bind, ImportDesc::Function(type_use, func_type))
             } |

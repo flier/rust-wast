@@ -7,8 +7,8 @@ use parity_wasm::builder::{signature, ModuleBuilder, TableDefinition, TableEntry
 use parity_wasm::elements::{FunctionNameSection, FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type,
                             TypeSection};
 
-use super::{data, elem, global, import, memory, table, typedef, var, LPAR, MODULE, RPAR, START};
-use ast::{Data, Elem, Global, Import, Memory, Table, Var};
+use super::{data, elem, export, global, import, memory, table, typedef, var, LPAR, MODULE, RPAR, START};
+use ast::{Data, Elem, Export, Global, Import, Memory, Table, Var};
 use errors::WastError::NotFound;
 
 #[derive(Clone, Debug, Default)]
@@ -17,18 +17,18 @@ pub struct Context {
     pub typedefs: HashMap<String, usize>,
     pub imports: Vec<Import>,
     pub import_names: HashMap<String, usize>,
+    pub funcs: FunctionNameSection,
     pub tables: Vec<Table>,
     pub table_names: HashMap<String, usize>,
-    pub elems: Vec<Elem>,
     pub memories: Vec<Memory>,
     pub memory_names: HashMap<String, usize>,
-    pub data: Vec<Data>,
-    pub funcs: FunctionNameSection,
-    pub locals: NameMap,
     pub globals: Vec<Global>,
     pub global_names: HashMap<String, usize>,
-    pub labels: NameMap,
+    pub locals: NameMap,
+    pub exports: Vec<Export>,
     pub entry: Option<Var>,
+    pub elems: Vec<Elem>,
+    pub data: Vec<Data>,
 }
 
 pub trait Resolvable {
@@ -210,15 +210,6 @@ named_args!(
                 ctxt.import_names.insert(id, import_ref);
             }
         }} |
-        global => { |(bind, global)| {
-            trace!("global {:?} = {:?}", bind, global);
-
-            let global_ref = ctxt.globals.get_or_insert(global);
-
-            if let Some(Var::Id(id)) = bind {
-                ctxt.global_names.insert(id, global_ref);
-            }
-        }} |
         table => { |(bind, table)| {
             trace!("table {:?} = {:?}", bind, table);
 
@@ -227,11 +218,6 @@ named_args!(
             if let Some(Var::Id(id)) = bind {
                 ctxt.table_names.insert(id, table_ref);
             }
-        }} |
-        elem => { |elem| {
-            trace!("elem {:?}", elem);
-
-            ctxt.elems.get_or_insert(elem);
         }} |
         memory => { |(bind, memory)| {
             trace!("memory {:?} = {:?}", bind, memory);
@@ -242,15 +228,34 @@ named_args!(
                 ctxt.memory_names.insert(id, mem_ref);
             }
         }} |
-        data => { |data| {
-            trace!("data {:?}", data);
+        global => { |(bind, global)| {
+            trace!("global {:?} = {:?}", bind, global);
 
-            ctxt.data.get_or_insert(data);
+            let global_ref = ctxt.globals.get_or_insert(global);
+
+            if let Some(Var::Id(id)) = bind {
+                ctxt.global_names.insert(id, global_ref);
+            }
+        }} |
+        export => { |export| {
+            trace!("export {:?}", export);
+
+            ctxt.exports.get_or_insert(export);
         }} |
         start => { |entry| {
             trace!("start {:?}", entry);
 
             ctxt.entry = Some(entry);
+        }} |
+        elem => { |elem| {
+            trace!("elem {:?}", elem);
+
+            ctxt.elems.get_or_insert(elem);
+        }} |
+        data => { |data| {
+            trace!("data {:?}", data);
+
+            ctxt.data.get_or_insert(data);
         }}
     )
 );

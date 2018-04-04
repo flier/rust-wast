@@ -1,23 +1,6 @@
-use std::str::{self, FromStr};
-use std::usize;
-
 use parity_wasm::elements::Opcode;
 
-use super::{int_type, nat32, ALIGN, EQ};
-
-/// align: align=(1|2|4|8|...)
-named!(
-    pub align<u32>,
-    map!(preceded!(pair!(ALIGN, EQ), nat32), |n| n as u32)
-);
-
-named!(
-    pub mem_size<usize>,
-    map_res!(
-        map_res!(alt!(tag!("8") | tag!("16") | tag!("32")), str::from_utf8),
-        usize::from_str
-    )
-);
+use super::int_type;
 
 /// sign:  s|u
 named!(pub sign, alt!(tag!("s") | tag!("u")));

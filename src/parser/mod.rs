@@ -30,7 +30,7 @@ pub use self::import::inline_import;
 pub use self::instr::{block, block_type, call_instr, instr_list, label, plain_instr, type_use};
 pub use self::memory::memory;
 pub use self::module::module;
-pub use self::ops::{align, binary, compare, convert, mem_size, sign, test, unary};
+pub use self::ops::{binary, compare, convert, sign, test, unary};
 pub use self::skip::skip;
 pub use self::table::table;
 pub use self::token::*;

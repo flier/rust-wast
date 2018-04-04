@@ -1,3 +1,6 @@
+use std::str::{self, FromStr};
+use std::usize;
+
 use itertools;
 use parity_wasm::elements::{BlockType, ValueType};
 
@@ -76,7 +79,7 @@ named!(
 
 named!(
     pub type_use<Var>,
-    ws!(delimited!(LPAR, preceded!(TYPE, var), RPAR))
+    delimited!(LPAR, preceded!(TYPE, first!(var)), RPAR)
 );
 
 named!(
@@ -138,83 +141,98 @@ named!(
 
 named!(
     pub block_type<ValueType>,
-    ws!(delimited!(LPAR, preceded!(RESULT, value_type), RPAR))
+    delimited!(LPAR, preceded!(RESULT, first!(value_type)), RPAR)
 );
 
 /// <val_type>.const <value>
 named!(
     constant<Constant>,
-    ws!(switch!(recognize!(pair!(value_type, tag!(".const"))),
-            b"i32.const" => map!(int32, |n| Constant::I32(n)) |
-            b"i64.const" => map!(int64, |n| Constant::I64(n)) |
-            b"f32.const" => map!(float32, |v| Constant::F32(v)) |
-            b"f64.const" => map!(float64, |v| Constant::F64(v))
-        ))
+    switch!(recognize!(pair!(value_type, tag!(".const"))),
+        b"i32.const" => map!(first!(int32),   |n| Constant::I32(n)) |
+        b"i64.const" => map!(first!(int64),   |n| Constant::I64(n)) |
+        b"f32.const" => map!(first!(float32), |v| Constant::F32(v)) |
+        b"f64.const" => map!(first!(float64), |v| Constant::F64(v))
+    )
 );
 
 /// <val_type>.load((8|16|32)_<sign>)? <offset>? <align>?
 #[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
     load<Load>,
-    ws!(do_parse!(
-        op: recognize!(tuple!(value_type, tag!(".load"), opt!(complete!(tuple!(mem_size, tag!("_"), sign))))) >>
-        offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
-        align: verify!(
-            map!(opt!(complete!(align)), |n| n.unwrap_or_default()),
-            |n: u32| n == 0 || n.is_power_of_two()
+    do_parse!(
+        op: recognize!(
+            tuple!(
+                first!(value_type),
+                tag!(".load"),
+                opt!(complete!(tuple!(mem_size, tag!("_"), sign)))
+            )
         ) >>
+        offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
+        align: map!(opt!(complete!(align)), |n| n.unwrap_or_default()) >>
         opcode: switch!(value!(op),
-            b"i32.load" => value!(Load::I32(align, offset)) |
-            b"i64.load" => value!(Load::I64(align, offset)) |
-            b"f32.load" => value!(Load::F32(align, offset)) |
-            b"f64.load" => value!(Load::F64(align, offset)) |
-            b"i32.load8_s" => value!(Load::I8AsI32(align, offset)) |
-            b"i32.load8_u" => value!(Load::U8AsI32(align, offset)) |
+            b"i32.load"     => value!(Load::I32(align, offset)) |
+            b"i64.load"     => value!(Load::I64(align, offset)) |
+            b"f32.load"     => value!(Load::F32(align, offset)) |
+            b"f64.load"     => value!(Load::F64(align, offset)) |
+            b"i32.load8_s"  => value!(Load::I8AsI32(align, offset)) |
+            b"i32.load8_u"  => value!(Load::U8AsI32(align, offset)) |
             b"i32.load16_s" => value!(Load::I16AsI32(align, offset)) |
             b"i32.load16_u" => value!(Load::U16AsI32(align, offset)) |
-            b"i64.load8_s" => value!(Load::I8AsI64(align, offset)) |
-            b"i64.load8_u" => value!(Load::U8AsI64(align, offset)) |
+            b"i64.load8_s"  => value!(Load::I8AsI64(align, offset)) |
+            b"i64.load8_u"  => value!(Load::U8AsI64(align, offset)) |
             b"i64.load16_s" => value!(Load::I16AsI64(align, offset)) |
             b"i64.load16_u" => value!(Load::U16AsI64(align, offset)) |
             b"i64.load32_s" => value!(Load::I32AsI64(align, offset)) |
             b"i64.load32_u" => value!(Load::U32AsI64(align, offset))
         ) >>
         ( opcode )
-    ))
+    )
 );
 
 /// <val_type>.store(8|16|32)? <offset>? <align>?
 #[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
     pub store<Store>,
-    ws!(do_parse!(
+    do_parse!(
         op: recognize!(tuple!(
-                value_type,
+                first!(value_type),
                 tag!(".store"),
                 opt!(complete!(mem_size))
             )) >>
         offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
-        align: verify!(
-            map!(opt!(complete!(align)), |n| n.unwrap_or_default()),
-            |n: u32| n == 0 || n.is_power_of_two()
-        ) >>
+        align: map!(opt!(complete!(align)), |n| n.unwrap_or_default()) >>
         opcode: switch!(value!(op),
-            b"i32.store" => value!(Store::I32(align, offset)) |
-            b"i64.store" => value!(Store::I64(align, offset)) |
-            b"f32.store" => value!(Store::F32(align, offset)) |
-            b"f64.store" => value!(Store::F64(align, offset)) |
-            b"i32.store8" => value!(Store::I32AsI8(align, offset)) |
-            b"i32.store16" => value!(Store::I32AsI16(align, offset)) |
-            b"i64.store8" => value!(Store::I64AsI8(align, offset)) |
-            b"i64.store16" => value!(Store::I64AsI16(align, offset)) |
-            b"i64.store32" => value!(Store::I64AsI32(align, offset))
+            b"i32.store"    => value!(Store::I32(align, offset)) |
+            b"i64.store"    => value!(Store::I64(align, offset)) |
+            b"f32.store"    => value!(Store::F32(align, offset)) |
+            b"f64.store"    => value!(Store::F64(align, offset)) |
+            b"i32.store8"   => value!(Store::I32AsI8(align, offset)) |
+            b"i32.store16"  => value!(Store::I32AsI16(align, offset)) |
+            b"i64.store8"   => value!(Store::I64AsI8(align, offset)) |
+            b"i64.store16"  => value!(Store::I64AsI16(align, offset)) |
+            b"i64.store32"  => value!(Store::I64AsI32(align, offset))
         ) >>
         ( opcode )
-    ))
+    )
 );
 
 /// offset: offset=<nat>
 named!(offset<u32>, map!(preceded!(pair!(OFFSET, EQ), nat32), |n| n as u32));
+
+/// align: align=(1|2|4|8|...)
+named!(
+    align<u32>,
+    verify!(map!(preceded!(pair!(ALIGN, EQ), nat32), |n| n as u32), |n: u32| n == 0
+        || n.is_power_of_two())
+);
+
+named!(
+    mem_size<usize>,
+    map_res!(
+        map_res!(first!(alt!(tag!("8") | tag!("16") | tag!("32"))), str::from_utf8),
+        usize::from_str
+    )
+);
 
 #[cfg(test)]
 mod tests {

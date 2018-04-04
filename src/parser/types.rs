@@ -71,7 +71,7 @@ named!(pub limits<(u32, Option<u32>)>, pair!(first!(nat32), opt!(first!(nat32)))
 
 named!(
     pub memory_type<MemoryType>,
-    map!(ws!(pair!(nat32, opt!(nat32))), |(min, max)| MemoryType::new(min, max))
+    map!(pair!(nat32, opt!(first!(nat32))), |(min, max)| MemoryType::new(min, max))
 );
 
 named!(

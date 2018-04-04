@@ -2,7 +2,7 @@
 
 named!(pub LPAR, first!(tag!("(")));
 named!(pub RPAR, first!(tag!(")")));
-named!(pub EQ, first!(tag!("=")));
+named!(pub EQ, tag!("="));
 
 named!(pub I32, first!(tag!("i32")));
 named!(pub I64, first!(tag!("i64")));

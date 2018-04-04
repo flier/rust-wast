@@ -8,14 +8,14 @@ use ast::Instr;
 
 named!(
     pub expr_list<Vec<Instr>>,
-    map!(ws!(many0!(first!(expr))), |instrs| itertools::flatten(instrs).collect())
+    map!(many0!(first!(expr)), |instrs| itertools::flatten(instrs).collect())
 );
 
 named!(
     pub expr<Vec<Instr>>,
     parsing!(
         Expr,
-        ws!(delimited!(
+        delimited!(
             LPAR,
             alt!(
                 plain_instr => {
@@ -47,7 +47,7 @@ named!(
                 }
             ),
             RPAR
-        ))
+        )
     )
 );
 
@@ -69,7 +69,7 @@ named!(
 
 named!(
     if_<(Vec<Instr>, Vec<Instr>, Option<Vec<Instr>>)>,
-    ws!(tuple!(
+    tuple!(
         first!(expr),
         delimited!(first!(LPAR), preceded!(THEN, first!(instr_list)), first!(RPAR)),
         opt!(delimited!(
@@ -77,7 +77,7 @@ named!(
             preceded!(ELSE, first!(instr_list)),
             first!(RPAR)
         ))
-    ))
+    )
 );
 
 named!(

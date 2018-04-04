@@ -4,12 +4,12 @@ use failure::{err_msg, Error};
 use nom::IResult;
 
 use parity_wasm::builder::{signature, ModuleBuilder, TableDefinition, TableEntryDefinition};
-use parity_wasm::elements::{FunctionNameSection, GlobalEntry, InitExpr, Module, NameMap, Type, TypeSection};
+use parity_wasm::elements::{FunctionNameSection, FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type,
+                            TypeSection};
 
 use super::{data, elem, global, memory, table, type_def, var};
 use ast::{Data, Elem, Global, Memory, Table, Var};
 use errors::WastError::NotFound;
-use parse::IndexSpace;
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
@@ -84,6 +84,55 @@ impl Resolvable for Table {
             min: self.table_type.limits().initial(),
             max: self.table_type.limits().maximum(),
             elements,
+        })
+    }
+}
+
+pub trait IndexSpace {
+    type Element: PartialEq;
+
+    fn get(&mut self, element: &Self::Element) -> Option<usize>;
+
+    fn get_or_insert(&mut self, element: Self::Element) -> usize;
+}
+
+impl<T> IndexSpace for Vec<T>
+where
+    T: PartialEq,
+{
+    type Element = T;
+
+    fn get(&mut self, element: &Self::Element) -> Option<usize> {
+        self.iter().position(|el| el == element)
+    }
+
+    fn get_or_insert(&mut self, element: Self::Element) -> usize {
+        self.get(&element).unwrap_or_else(|| {
+            let idx = self.len();
+
+            self.push(element);
+
+            idx
+        })
+    }
+}
+
+impl IndexSpace for TypeSection {
+    type Element = FunctionType;
+
+    fn get(&mut self, func_type: &FunctionType) -> Option<usize> {
+        self.types()
+            .iter()
+            .position(|ty| Type::Function(func_type.clone()) == *ty)
+    }
+
+    fn get_or_insert(&mut self, func_type: FunctionType) -> usize {
+        self.get(&func_type).unwrap_or_else(|| {
+            let idx = self.types().len();
+
+            self.types_mut().push(Type::Function(func_type));
+
+            idx
         })
     }
 }

@@ -20,8 +20,6 @@ extern crate pretty_env_logger;
 mod errors;
 #[macro_use]
 mod parser;
-#[macro_use]
-mod parse;
 mod ast;
 //mod ops;
 mod func;

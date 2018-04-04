@@ -1,20 +1,20 @@
 use parity_wasm::elements::MemoryType;
 
-use super::{bind_var, inline_export, inline_import, memory_type, string_list};
+use super::{bind_var, inline_export, inline_import, memory_type, string_list, DATA, LPAR, MEMORY, RPAR};
 use ast::{Memory, Var};
 
 named!(
     pub memory<(Option<Var>, Memory)>,
     parsing!(
         Memory,
-        dbg_dmp!(delimited!(
-            tag!("("),
+        delimited!(
+            LPAR,
             preceded!(
-                first!(tag!("memory")),
+                MEMORY,
                 pair!(opt!(first!(bind_var)), first!(memory_fields))
             ),
-            tag!(")")
-        ))
+            RPAR
+        )
     )
 );
 
@@ -29,9 +29,9 @@ named!(
             |(export_name, memory)| memory
         } |
         delimited!(
-            tag!("("),
-            preceded!(first!(tag!("data")), string_list),
-            tag!(")")
+            LPAR,
+            preceded!(DATA, string_list),
+            RPAR
         ) => { |strs: Vec<String>|
         {
             let elements = strs.into_iter().fold(vec![], |mut value, s| {

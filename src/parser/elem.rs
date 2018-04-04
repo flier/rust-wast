@@ -1,5 +1,5 @@
-use super::{init_expr, offset, var, var_list};
 use ast::{Elem, Var};
+use super::{init_expr, offset, var, var_list, ELEM, LPAR, RPAR};
 
 named!(
     pub elem<Elem>,
@@ -7,16 +7,16 @@ named!(
         Elem,
         map!(
             delimited!(
-                tag!("("),
+                LPAR,
                 preceded!(
-                    first!(tag!("elem")),
+                    ELEM,
                     tuple!(
                         opt!(first!(var)),
                         alt_complete!(first!(offset) | first!(init_expr)),
                         var_list
                     )
                 ),
-                tag!(")")
+                RPAR
             ),
             |(table_index, offset, elements)| Elem {
                 table_index: table_index.unwrap_or(Var::Index(0)),

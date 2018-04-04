@@ -1,11 +1,11 @@
-use super::string;
+use super::{string, IMPORT, LPAR, RPAR};
 
 named!(
     pub inline_import<(String, String)>,
     delimited!(
-        tag!("("),
-        preceded!(first!(tag!("import")), pair!(first!(string), first!(string))),
-        tag!(")")
+        LPAR,
+        preceded!(IMPORT, pair!(first!(string), first!(string))),
+        RPAR
     )
 );
 

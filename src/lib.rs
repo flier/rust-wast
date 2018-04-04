@@ -21,7 +21,5 @@ mod errors;
 #[macro_use]
 mod parser;
 mod ast;
-//mod ops;
-mod func;
 
 pub use errors::WastError;

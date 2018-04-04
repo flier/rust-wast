@@ -2,7 +2,8 @@ use failure::Error;
 use itertools;
 use parity_wasm::elements::{BlockType, InitExpr, Opcode};
 
-use super::{block, block_type, call_instr, instr_list, label, plain_instr};
+use super::{block, block_type, call_instr, instr_list, label, plain_instr, BLOCK, ELSE, IF, LOOP, LPAR, OFFSET, RPAR,
+            THEN};
 use ast::Instr;
 
 named!(
@@ -15,7 +16,7 @@ named!(
     parsing!(
         Expr,
         ws!(delimited!(
-            tag!("("),
+            LPAR,
             alt!(
                 plain_instr => {
                     |instr| vec![instr]
@@ -23,13 +24,13 @@ named!(
                 call_instr => {
                     |instr| vec![instr]
                 } |
-                preceded!(tag!("block"), tuple!(label, first!(block))) => { |(label, (result_type, instrs))|
+                preceded!(BLOCK, tuple!(label, first!(block))) => { |(label, (result_type, instrs))|
                     vec![Instr::Block(label, result_type, instrs)]
                 } |
-                preceded!(tag!("loop"), tuple!(label, first!(block))) => { |(label, (result_type, instrs))|
+                preceded!(LOOP, tuple!(label, first!(block))) => { |(label, (result_type, instrs))|
                     vec![Instr::Loop(label, result_type, instrs)]
                 } |
-                preceded!(tag!("if"), tuple!(label, first!(if_block))) => {
+                preceded!(IF, tuple!(label, first!(if_block))) => {
                     |(label, (mut cond_instrs, result_type, then_instrs, else_instrs))| {
                         let mut instrs = vec![];
 
@@ -45,7 +46,7 @@ named!(
                     }
                 }
             ),
-            tag!(")")
+            RPAR
         ))
     )
 );
@@ -70,15 +71,11 @@ named!(
     if_<(Vec<Instr>, Vec<Instr>, Option<Vec<Instr>>)>,
     ws!(tuple!(
         first!(expr),
-        delimited!(
-            first!(tag!("(")),
-            preceded!(first!(tag!("then")), first!(instr_list)),
-            first!(tag!(")"))
-        ),
+        delimited!(first!(LPAR), preceded!(THEN, first!(instr_list)), first!(RPAR)),
         opt!(delimited!(
-            first!(tag!("(")),
-            preceded!(first!(tag!("else")), first!(instr_list)),
-            first!(tag!(")"))
+            first!(LPAR),
+            preceded!(ELSE, first!(instr_list)),
+            first!(RPAR)
         ))
     ))
 );
@@ -101,9 +98,9 @@ named!(
 named!(
     pub offset<InitExpr>,
     delimited!(
-        tag!("("),
-        preceded!(first!(tag!("offset")), first!(init_expr)),
-        tag!(")")
+        LPAR,
+        preceded!(OFFSET, first!(init_expr)),
+        RPAR
     )
 );
 

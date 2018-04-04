@@ -1,6 +1,6 @@
 use parity_wasm::elements::{FunctionType, ValueType};
 
-use super::{bind_var, value_type, value_type_list, var};
+use super::{bind_var, value_type, value_type_list, var, FUNC, LPAR, PARAM, RESULT, RPAR, TYPE};
 use ast::Var;
 
 named!(
@@ -8,23 +8,18 @@ named!(
     parsing!(
         TypeDef,
         delimited!(
-            tag!("("),
-            preceded!(first!(tag!("type")), pair!(opt!(first!(bind_var)), first!(def_type))),
-            tag!(")")
+            LPAR,
+            preceded!(TYPE, pair!(opt!(first!(bind_var)), first!(def_type))),
+            RPAR
         )
     )
 );
 
 named!(
     def_type<FunctionType>,
-    map!(
-        delimited!(
-            tag!("("),
-            preceded!(first!(tag!("func")), opt!(first!(func_type))),
-            tag!(")")
-        ),
-        |ft| ft.unwrap_or_default()
-    )
+    map!(delimited!(LPAR, preceded!(FUNC, opt!(first!(func_type))), RPAR), |ft| {
+        ft.unwrap_or_default()
+    })
 );
 
 named!(
@@ -44,25 +39,21 @@ named!(
 named!(
     param<Vec<ValueType>>,
     delimited!(
-        tag!("("),
+        LPAR,
         preceded!(
-            first!(tag!("param")),
+            PARAM,
             alt!(
                 pair!(first!(var), first!(value_type)) => { |(id, vt)| vec![vt] } |
                 value_type_list
             )
         ),
-        tag!(")")
+        RPAR
     )
 );
 
 named!(
     result<Option<ValueType>>,
-    delimited!(
-        tag!("("),
-        preceded!(first!(tag!("result")), opt!(first!(value_type))),
-        tag!(")")
-    )
+    delimited!(LPAR, preceded!(RESULT, opt!(first!(value_type))), RPAR)
 );
 
 #[cfg(test)]

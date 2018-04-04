@@ -1,9 +1,8 @@
 use itertools;
 use parity_wasm::elements::{BlockType, ValueType};
 
-use super::{align, binary, compare, convert, expr, func_type, id, mem_size, sign, test, unary, value_type, var,
-            float32, float64, int32, int64, nat32};
 use ast::{Constant, Instr, Load, Store, Var};
+use super::*;
 
 named!(pub label<Option<String>>, opt!(complete!(map!(first!(id), |s| s.to_owned()))));
 
@@ -30,26 +29,26 @@ named!(
     parsing!(
         PlainInstr,
         alt_complete!(
-            tag!("unreachable") => { |_| Instr::Unreachable } |
-            tag!("nop") => { |_| Instr::Nop } |
-            preceded!(tag!("br"), first!(var)) => { |var| Instr::Br(var) } |
-            preceded!(tag!("br_if"), first!(var)) => { |var| Instr::BrIf(var) } |
-            preceded!(tag!("br_table"), pair!(first!(var), many0!(first!(var)))) => {
+            UNREACHABLE => { |_| Instr::Unreachable } |
+            NOP => { |_| Instr::Nop } |
+            preceded!(BR, first!(var)) => { |var| Instr::Br(var) } |
+            preceded!(BR_IF, first!(var)) => { |var| Instr::BrIf(var) } |
+            preceded!(BR_TABLE, pair!(first!(var), many0!(first!(var)))) => {
                 |(default, targets)| Instr::BrTable(targets, default)
             } |
-            tag!("return") => { |_| Instr::Return } |
-            ws!(preceded!(tag!("call"), var)) => { |var| Instr::Call(var) } |
-            tag!("drop") => { |_| Instr::Drop } |
-            tag!("select") => { |_| Instr::Select } |
-            ws!(preceded!(tag!("get_local"), var)) => { |var| Instr::GetLocal(var) } |
-            ws!(preceded!(tag!("set_local"), var)) => { |var| Instr::SetLocal(var) } |
-            ws!(preceded!(tag!("tee_local"), var)) => { |var| Instr::TeeLocal(var) } |
-            ws!(preceded!(tag!("get_global"), var)) => { |var| Instr::GetGlobal(var) } |
-            ws!(preceded!(tag!("set_global"), var)) => { |var| Instr::SetGlobal(var) } |
+            RETURN => { |_| Instr::Return } |
+            preceded!(CALL, first!(var)) => { |var| Instr::Call(var) } |
+            DROP => { |_| Instr::Drop } |
+            SELECT => { |_| Instr::Select } |
+            preceded!(GET_LOCAL, first!(var)) => { |var| Instr::GetLocal(var) } |
+            preceded!(SET_LOCAL, first!(var)) => { |var| Instr::SetLocal(var) } |
+            preceded!(TEE_LOCAL, first!(var)) => { |var| Instr::TeeLocal(var) } |
+            preceded!(GET_GLOBAL, first!(var)) => { |var| Instr::GetGlobal(var) } |
+            preceded!(SET_GLOBAL, first!(var)) => { |var| Instr::SetGlobal(var) } |
             load => { |load| Instr::Load(load) } |
             store => { |store| Instr::Store(store) } |
-            tag!("current_memory") => { |_| Instr::CurrentMemory } |
-            tag!("grow_memory") => { |_| Instr::GrowMemory } |
+            CURRENT_MEMORY => { |_| Instr::CurrentMemory } |
+            GROW_MEMORY => { |_| Instr::GrowMemory } |
             constant => { |constant| Instr::Const(constant) } |
             test => { |test| Instr::Test(test) } |
             compare => { |compare| Instr::Compare(compare) } |
@@ -62,7 +61,7 @@ named!(
 
 named!(
     pub call_instr<Instr>,
-    preceded!(tag!("call_indirect"), first!(call_instr_type))
+    preceded!(CALL_INDIRECT, first!(call_instr_type))
 );
 
 named!(
@@ -77,7 +76,7 @@ named!(
 
 named!(
     pub type_use<Var>,
-    ws!(delimited!(tag!("("), preceded!(tag!("type"), var), tag!(")")))
+    ws!(delimited!(LPAR, preceded!(TYPE, var), RPAR))
 );
 
 named!(
@@ -85,7 +84,7 @@ named!(
     parsing!(
         BlockInstr,
         alt!(
-            preceded!(tag!("block"), tuple!(label, first!(block), first!(tag!("end")), label)) =>
+            preceded!(BLOCK, tuple!(label, first!(block), END, label)) =>
             { |(label, (result_type, instrs), _, end_label)|
                 Instr::Block(
                     label,
@@ -93,7 +92,7 @@ named!(
                     instrs,
                 )
             } |
-            preceded!(tag!("loop"), tuple!(label, first!(block), first!(tag!("end")), label)) =>
+            preceded!(LOOP, tuple!(label, first!(block), END, label)) =>
             { |(label, (result_type, instrs), _, end_label)|
                 Instr::Loop(
                     label,
@@ -101,7 +100,7 @@ named!(
                     instrs
                 )
             } |
-            preceded!(tag!("if"), tuple!(label, first!(block), first!(tag!("end")), label)) =>
+            preceded!(IF, tuple!(label, first!(block), END, label)) =>
             { |(label, (result_type, then_instrs), _, end_label)|
                 Instr::If(
                     label,
@@ -111,9 +110,9 @@ named!(
                 )
             } |
             tuple!(
-                preceded!(tag!("if"), tuple!(label, first!(block))),
-                preceded!(first!(tag!("else")), tuple!(label, instr_list)),
-                preceded!(first!(tag!("end")), label)
+                preceded!(IF, tuple!(label, first!(block))),
+                preceded!(ELSE, tuple!(label, instr_list)),
+                preceded!(END, label)
             ) => { |((label, (block_type, then_instrs)), (else_label, else_instrs), end_label)|
                 Instr::If(
                     label,
@@ -139,7 +138,7 @@ named!(
 
 named!(
     pub block_type<ValueType>,
-    ws!(delimited!(tag!("("), preceded!(tag!("result"), value_type), tag!(")")))
+    ws!(delimited!(LPAR, preceded!(RESULT, value_type), RPAR))
 );
 
 /// <val_type>.const <value>
@@ -222,7 +221,7 @@ mod tests {
     use std::str;
 
     use nom::IResult::*;
-    use parity_wasm::elements::{FunctionType, ValueType::*};
+    use parity_wasm::elements::{FunctionType, ValueType};
 
     use super::*;
     use ast::{empty_block, Var};
@@ -292,17 +291,29 @@ mod tests {
             ),
             (
                 b"call_indirect (param i32)",
-                Done(&[][..], CallIndirect(None, Some(FunctionType::new(vec![I32], None)))),
+                Done(
+                    &[][..],
+                    CallIndirect(None, Some(FunctionType::new(vec![ValueType::I32], None))),
+                ),
             ),
             (
                 b"call_indirect (param i64)",
-                Done(&[][..], CallIndirect(None, Some(FunctionType::new(vec![I64], None)))),
+                Done(
+                    &[][..],
+                    CallIndirect(None, Some(FunctionType::new(vec![ValueType::I64], None))),
+                ),
             ),
             (
                 b"call_indirect (param i32) (param i64) (result f32)",
                 Done(
                     &[][..],
-                    CallIndirect(None, Some(FunctionType::new(vec![I32, I64], Some(F32)))),
+                    CallIndirect(
+                        None,
+                        Some(FunctionType::new(
+                            vec![ValueType::I32, ValueType::I64],
+                            Some(ValueType::F32),
+                        )),
+                    ),
                 ),
             ),
         ];
@@ -320,7 +331,7 @@ mod tests {
             (b"block\nend", Done(&[][..], empty_block())),
             (
                 b"block (result i32)\nend",
-                Done(&[][..], Block(None, BlockType::Value(I32), vec![])),
+                Done(&[][..], Block(None, BlockType::Value(ValueType::I32), vec![])),
             ),
             (
                 b"block $done\nend $done",
@@ -328,20 +339,27 @@ mod tests {
             ),
             (
                 b"block $done (result i32)\nend $done",
-                Done(&[][..], Block(Some("done".to_owned()), BlockType::Value(I32), vec![])),
+                Done(
+                    &[][..],
+                    Block(Some("done".to_owned()), BlockType::Value(ValueType::I32), vec![]),
+                ),
             ),
             (
                 b"block $done (result i32) nop\nend $done",
                 Done(
                     &[][..],
-                    Block(Some("done".to_owned()), BlockType::Value(I32), vec![Nop]),
+                    Block(Some("done".to_owned()), BlockType::Value(ValueType::I32), vec![Nop]),
                 ),
             ),
             (
                 b"loop $done (result i32) unreachable\nend $done",
                 Done(
                     &[][..],
-                    Loop(Some("done".to_owned()), BlockType::Value(I32), vec![Unreachable]),
+                    Loop(
+                        Some("done".to_owned()),
+                        BlockType::Value(ValueType::I32),
+                        vec![Unreachable],
+                    ),
                 ),
             ),
             (
@@ -350,7 +368,7 @@ mod tests {
                     &[][..],
                     If(
                         Some("done".to_owned()),
-                        BlockType::Value(I32),
+                        BlockType::Value(ValueType::I32),
                         vec![Nop, Unreachable],
                         vec![],
                     ),
@@ -362,7 +380,7 @@ mod tests {
                     &[][..],
                     If(
                         Some("done".to_owned()),
-                        BlockType::Value(I32),
+                        BlockType::Value(ValueType::I32),
                         vec![Nop],
                         vec![Unreachable],
                     ),

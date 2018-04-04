@@ -7,9 +7,9 @@ use parity_wasm::builder::{signature, ModuleBuilder, TableDefinition, TableEntry
 use parity_wasm::elements::{FunctionNameSection, FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type,
                             TypeSection};
 
-use super::{data, elem, global, memory, table, type_def, var};
 use ast::{Data, Elem, Global, Memory, Table, Var};
 use errors::WastError::NotFound;
+use super::{data, elem, global, memory, table, type_def, var, LPAR, MODULE, RPAR, START};
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
@@ -143,12 +143,12 @@ pub fn module(input: &[u8]) -> IResult<&[u8], Module> {
     map_res!(
         input,
         delimited!(
-            tag!("("),
+            LPAR,
             preceded!(
-                first!(tag!("module")),
+                MODULE,
                 pair!(opt!(first!(var)), many0!(first!(apply!(module_field, &mut ctxt))))
             ),
-            tag!(")")
+            RPAR
         ),
         |_| -> Result<Module, Error> {
             let mut builder = ModuleBuilder::new().with_signatures(
@@ -236,10 +236,7 @@ named_args!(
     )
 );
 
-named!(
-    start<Var>,
-    delimited!(tag!("("), preceded!(first!(tag!("start")), first!(var)), tag!(")"))
-);
+named!(start<Var>, delimited!(LPAR, preceded!(START, first!(var)), RPAR));
 
 #[cfg(test)]
 mod tests {

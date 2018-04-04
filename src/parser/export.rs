@@ -1,8 +1,8 @@
-use super::string;
+use super::{string, EXPORT, LPAR, RPAR};
 
 named!(
     pub inline_export<String>,
-    delimited!(tag!("("), preceded!(first!(tag!("export")), first!(string)), tag!(")"))
+    delimited!(LPAR, preceded!(EXPORT, first!(string)), RPAR)
 );
 
 #[cfg(test)]

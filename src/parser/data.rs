@@ -1,4 +1,4 @@
-use super::{init_expr, offset, string_list, var};
+use super::{init_expr, offset, string_list, var, DATA, LPAR, RPAR};
 use ast::{Data, Var};
 
 named!(
@@ -7,16 +7,16 @@ named!(
         Data,
         dbg_dmp!(map!(
             delimited!(
-                tag!("("),
+                LPAR,
                 preceded!(
-                    first!(tag!("data")),
+                    DATA,
                     tuple!(
                         opt!(first!(var)),
                         alt_complete!(first!(offset) | first!(init_expr)),
                         string_list
                     )
                 ),
-                tag!(")")
+                RPAR
             ),
             |(mem_index, offset, strs)| Data {
                 mem_index: mem_index.unwrap_or(Var::Index(0)),

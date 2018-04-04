@@ -1,6 +1,6 @@
 use parity_wasm::elements::TableType;
 
-use super::{bind_var, elem_type, inline_export, inline_import, table_type, var_list};
+use super::{bind_var, elem_type, inline_export, inline_import, table_type, var_list, ELEM, LPAR, RPAR, TABLE};
 use ast::{Table, Var};
 
 named!(
@@ -8,12 +8,12 @@ named!(
     parsing!(
         Table,
         dbg_dmp!(delimited!(
-            tag!("("),
+            LPAR,
             preceded!(
-                first!(tag!("table")),
+                TABLE,
                 pair!(opt!(first!(bind_var)), first!(table_fields))
             ),
-            tag!(")")
+            RPAR
         ))
     )
 );
@@ -31,9 +31,9 @@ named!(
         preceded!(
             first!(elem_type),
             first!(delimited!(
-                tag!("("),
-                preceded!(first!(tag!("elem")), var_list),
-                tag!(")")
+                LPAR,
+                preceded!(ELEM, var_list),
+                RPAR
             ))
         ) => { |elements: Vec<_>|
             Table {

@@ -1,5 +1,5 @@
-use ast::{Elem, Var};
 use super::{init_expr, offset, var, var_list, ELEM, LPAR, RPAR};
+use ast::{Elem, Var};
 
 named!(
     pub elem<Elem>,

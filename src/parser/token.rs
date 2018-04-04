@@ -2,12 +2,14 @@
 
 named!(pub LPAR, first!(tag!("(")));
 named!(pub RPAR, first!(tag!(")")));
+named!(pub EQ, first!(tag!("=")));
 
 named!(pub I32, first!(tag!("i32")));
 named!(pub I64, first!(tag!("i64")));
 named!(pub F32, first!(tag!("f32")));
 named!(pub F64, first!(tag!("f64")));
 
+named!(pub ALIGN, first!(tag!("align")));
 named!(pub ANYFUNC, first!(tag!("anyfunc")));
 named!(pub BLOCK, first!(tag!("block")));
 named!(pub BR_IF, first!(tag!("br_if")));

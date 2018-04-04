@@ -7,9 +7,9 @@ use parity_wasm::builder::{signature, ModuleBuilder, TableDefinition, TableEntry
 use parity_wasm::elements::{FunctionNameSection, FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type,
                             TypeSection};
 
+use super::{data, elem, global, memory, table, type_def, var, LPAR, MODULE, RPAR, START};
 use ast::{Data, Elem, Global, Memory, Table, Var};
 use errors::WastError::NotFound;
-use super::{data, elem, global, memory, table, type_def, var, LPAR, MODULE, RPAR, START};
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {

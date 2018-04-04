@@ -3,12 +3,12 @@ use std::usize;
 
 use parity_wasm::elements::Opcode;
 
-use super::{int_type, nat32};
+use super::{int_type, nat32, ALIGN, EQ};
 
 /// align: align=(1|2|4|8|...)
 named!(
     pub align<u32>,
-    map!(preceded!(tag!("align="), nat32), |n| n as u32)
+    map!(preceded!(pair!(ALIGN, EQ), nat32), |n| n as u32)
 );
 
 named!(

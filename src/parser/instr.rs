@@ -1,8 +1,8 @@
 use itertools;
 use parity_wasm::elements::{BlockType, ValueType};
 
-use ast::{Constant, Instr, Load, Store, Var};
 use super::*;
+use ast::{Constant, Instr, Load, Store, Var};
 
 named!(pub label<Option<String>>, opt!(complete!(map!(first!(id), |s| s.to_owned()))));
 
@@ -214,7 +214,7 @@ named!(
 );
 
 /// offset: offset=<nat>
-named!(offset<u32>, map!(preceded!(tag!("offset="), nat32), |n| n as u32));
+named!(offset<u32>, map!(preceded!(pair!(OFFSET, EQ), nat32), |n| n as u32));
 
 #[cfg(test)]
 mod tests {

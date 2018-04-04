@@ -1,7 +1,7 @@
 use parity_wasm::elements::{GlobalType, InitExpr, ValueType};
 
-use ast::{Global, Var};
 use super::{bind_var, init_expr, inline_export, inline_import, value_type, GLOBAL, LPAR, MUT, RPAR};
+use ast::{Global, Var};
 
 named!(
     pub global<(Option<Var>, Global)>,

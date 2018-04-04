@@ -28,12 +28,12 @@ pub use self::expr::{expr, expr_list, init_expr, offset};
 pub use self::global::global;
 pub use self::import::inline_import;
 pub use self::instr::{block, block_type, call_instr, instr_list, label, plain_instr, type_use};
-pub use self::token::*;
 pub use self::memory::memory;
 pub use self::module::module;
 pub use self::ops::{align, binary, compare, convert, mem_size, sign, test, unary};
 pub use self::skip::skip;
 pub use self::table::table;
+pub use self::token::*;
 pub use self::type_def::type_def;
 pub use self::types::{elem_type, float_type, func_type, global_type, int_type, limits, memory_type, table_type,
                       value_type, value_type_list};

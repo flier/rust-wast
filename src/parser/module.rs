@@ -7,14 +7,16 @@ use parity_wasm::builder::{signature, ModuleBuilder, TableDefinition, TableEntry
 use parity_wasm::elements::{FunctionNameSection, FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type,
                             TypeSection};
 
-use super::{data, elem, global, memory, table, typedef, var, LPAR, MODULE, RPAR, START};
-use ast::{Data, Elem, Global, Memory, Table, Var};
+use super::{data, elem, global, import, memory, table, typedef, var, LPAR, MODULE, RPAR, START};
+use ast::{Data, Elem, Global, Import, Memory, Table, Var};
 use errors::WastError::NotFound;
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
     pub types: TypeSection,
     pub typedefs: HashMap<String, usize>,
+    pub imports: Vec<Import>,
+    pub import_names: HashMap<String, usize>,
     pub tables: Vec<Table>,
     pub table_names: HashMap<String, usize>,
     pub elems: Vec<Elem>,
@@ -197,6 +199,15 @@ named_args!(
 
             if let Some(Var::Id(id)) = bind {
                 ctxt.typedefs.insert(id, type_ref);
+            }
+        }} |
+        import => { |(bind, import)| {
+            trace!("import {:?} = {:?}", bind, import);
+
+            let import_ref = ctxt.imports.get_or_insert(import);
+
+            if let Some(Var::Id(id)) = bind {
+                ctxt.import_names.insert(id, import_ref);
             }
         }} |
         global => { |(bind, global)| {

@@ -18,7 +18,22 @@ impl Var {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Import {
+    pub module: String,
+    pub name: String,
+    pub desc: ImportDesc,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportDesc {
+    Function(Option<Var>, Option<FunctionType>),
+    Table(TableType),
+    Memory(MemoryType),
+    Global(GlobalType),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Global {
     pub global_type: GlobalType,
     pub init_expr: InitExpr,
@@ -30,68 +45,30 @@ impl Global {
     }
 }
 
-impl PartialEq for Global {
-    fn eq(&self, other: &Self) -> bool {
-        self.global_type.content_type() == other.global_type.content_type()
-            && self.global_type.is_mutable() == other.global_type.is_mutable()
-            && self.init_expr.code() == other.init_expr.code()
-    }
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Memory {
     pub memory_type: MemoryType,
     pub elements: Vec<u8>,
 }
 
-impl PartialEq for Memory {
-    fn eq(&self, other: &Self) -> bool {
-        self.memory_type.limits().initial() == other.memory_type.limits().initial()
-            && self.memory_type.limits().maximum() == other.memory_type.limits().maximum()
-            && self.elements == other.elements
-    }
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Table {
     pub table_type: TableType,
     pub elements: Vec<Var>,
 }
 
-impl PartialEq for Table {
-    fn eq(&self, other: &Self) -> bool {
-        self.table_type.elem_type() == other.table_type.elem_type()
-            && self.table_type.limits().initial() == other.table_type.limits().initial()
-            && self.table_type.limits().maximum() == other.table_type.limits().maximum()
-            && self.elements == other.elements
-    }
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Data {
     pub mem_index: Var,
     pub offset: InitExpr,
     pub value: Vec<u8>,
 }
 
-impl PartialEq for Data {
-    fn eq(&self, other: &Self) -> bool {
-        self.mem_index == other.mem_index && self.offset.code() == other.offset.code() && self.value == other.value
-    }
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Elem {
     pub table_index: Var,
     pub offset: InitExpr,
     pub elements: Vec<Var>,
-}
-
-impl PartialEq for Elem {
-    fn eq(&self, other: &Self) -> bool {
-        self.table_index == other.table_index && self.offset.code() == other.offset.code()
-            && self.elements == other.elements
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

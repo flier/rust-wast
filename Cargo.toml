@@ -10,7 +10,7 @@ lazy_static = "1.0"
 itertools = "0.7"
 regex = "0.2"
 nom = { version = "3.2", features = ["verbose-errors", "regexp_macros"] }
-parity-wasm = "0.27"
+parity-wasm = { git = "https://github.com/flier/parity-wasm/", branch = "more_partial_eq" }
 
 [dev-dependencies]
 pretty_env_logger = "0.2"

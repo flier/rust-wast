@@ -27,7 +27,7 @@ pub use self::elem::elem;
 pub use self::export::inline_export;
 pub use self::expr::{expr, expr_list, init_expr, offset};
 pub use self::global::global;
-pub use self::import::inline_import;
+pub use self::import::{import, inline_import};
 pub use self::instr::{block, block_type, call_instr, instr_list, label, plain_instr};
 pub use self::memory::memory;
 pub use self::module::{funcidx, globalidx, labelidx, localidx, memidx, module, tableidx, typeidx};

@@ -137,6 +137,14 @@ impl IndexSpace for TypeSection {
     }
 }
 
+named!(pub typeidx<Var>, first!(var));
+named!(pub funcidx<Var>, first!(var));
+named!(pub tableidx<Var>, first!(var));
+named!(pub memidx<Var>, first!(var));
+named!(pub globalidx<Var>, first!(var));
+named!(pub localidx<Var>, first!(var));
+named!(pub labelidx<Var>, first!(var));
+
 pub fn module(input: &[u8]) -> IResult<&[u8], Module> {
     let mut ctxt = Context::default();
 

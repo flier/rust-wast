@@ -1,11 +1,8 @@
-use std::str::{self, FromStr};
-use std::usize;
-
 use itertools;
 use parity_wasm::elements::{BlockType, ValueType};
 
 use super::*;
-use ast::{Constant, Instr, Load, Store, Var};
+use ast::{Instr, Var};
 
 named!(pub label<Option<String>>, opt!(complete!(map!(first!(id), |s| s.to_owned()))));
 
@@ -32,32 +29,36 @@ named!(
     parsing!(
         PlainInstr,
         alt_complete!(
-            UNREACHABLE => { |_| Instr::Unreachable } |
-            NOP => { |_| Instr::Nop } |
-            preceded!(BR, first!(var)) => { |var| Instr::Br(var) } |
-            preceded!(BR_IF, first!(var)) => { |var| Instr::BrIf(var) } |
-            preceded!(BR_TABLE, pair!(first!(var), many0!(first!(var)))) => {
-                |(default, targets)| Instr::BrTable(targets, default)
+            NOP                                 => { |_| Instr::Nop } |
+            UNREACHABLE                         => { |_| Instr::Unreachable } |
+            preceded!(BR, labelidx)             => { |var| Instr::Br(var) } |
+            preceded!(BR_IF, labelidx)          => { |var| Instr::BrIf(var) } |
+            preceded!(BR_TABLE, many1!(labelidx)) => { |labels: Vec<Var>|
+                if let Some((default, targets)) = labels.split_last() {
+                    Instr::BrTable(targets.to_vec(), default.clone())
+                } else {
+                    unreachable!()
+                }
             } |
-            RETURN => { |_| Instr::Return } |
-            preceded!(CALL, first!(var)) => { |var| Instr::Call(var) } |
-            DROP => { |_| Instr::Drop } |
-            SELECT => { |_| Instr::Select } |
-            preceded!(GET_LOCAL, first!(var)) => { |var| Instr::GetLocal(var) } |
-            preceded!(SET_LOCAL, first!(var)) => { |var| Instr::SetLocal(var) } |
-            preceded!(TEE_LOCAL, first!(var)) => { |var| Instr::TeeLocal(var) } |
-            preceded!(GET_GLOBAL, first!(var)) => { |var| Instr::GetGlobal(var) } |
-            preceded!(SET_GLOBAL, first!(var)) => { |var| Instr::SetGlobal(var) } |
-            load => { |load| Instr::Load(load) } |
-            store => { |store| Instr::Store(store) } |
-            CURRENT_MEMORY => { |_| Instr::CurrentMemory } |
-            GROW_MEMORY => { |_| Instr::GrowMemory } |
-            constant => { |constant| Instr::Const(constant) } |
-            test => { |test| Instr::Test(test) } |
-            compare => { |compare| Instr::Compare(compare) } |
-            unary => { |unary| Instr::Unary(unary) } |
-            binary => { |binary| Instr::Binary(binary) } |
-            convert => { |convert| Instr::Convert(convert) }
+            RETURN                              => { |_| Instr::Return } |
+            preceded!(CALL, funcidx)            => { |var| Instr::Call(var) } |
+            DROP                                => { |_| Instr::Drop } |
+            SELECT                              => { |_| Instr::Select } |
+            preceded!(GET_LOCAL, localidx)      => { |var| Instr::GetLocal(var) } |
+            preceded!(SET_LOCAL, localidx)      => { |var| Instr::SetLocal(var) } |
+            preceded!(TEE_LOCAL, localidx)      => { |var| Instr::TeeLocal(var) } |
+            preceded!(GET_GLOBAL, globalidx)    => { |var| Instr::GetGlobal(var) } |
+            preceded!(SET_GLOBAL, globalidx)    => { |var| Instr::SetGlobal(var) } |
+            load                                => { |load| Instr::Load(load) } |
+            store                               => { |store| Instr::Store(store) } |
+            CURRENT_MEMORY                      => { |_| Instr::CurrentMemory } |
+            GROW_MEMORY                         => { |_| Instr::GrowMemory } |
+            constant                            => { |constant| Instr::Const(constant) } |
+            test                                => { |test| Instr::Test(test) } |
+            compare                             => { |compare| Instr::Compare(compare) } |
+            unary                               => { |unary| Instr::Unary(unary) } |
+            binary                              => { |binary| Instr::Binary(binary) } |
+            convert                             => { |convert| Instr::Convert(convert) }
         )
     )
 );
@@ -127,96 +128,6 @@ named!(
     delimited!(LPAR, preceded!(RESULT, first!(value_type)), RPAR)
 );
 
-/// <val_type>.const <value>
-named!(
-    constant<Constant>,
-    switch!(recognize!(pair!(value_type, tag!(".const"))),
-        b"i32.const" => map!(first!(int32),   |n| Constant::I32(n)) |
-        b"i64.const" => map!(first!(int64),   |n| Constant::I64(n)) |
-        b"f32.const" => map!(first!(float32), |v| Constant::F32(v)) |
-        b"f64.const" => map!(first!(float64), |v| Constant::F64(v))
-    )
-);
-
-/// <val_type>.load((8|16|32)_<sign>)? <offset>? <align>?
-#[cfg_attr(rustfmt, rustfmt_skip)]
-named!(
-    load<Load>,
-    do_parse!(
-        op: recognize!(
-            tuple!(
-                first!(value_type),
-                tag!(".load"),
-                opt!(complete!(tuple!(mem_size, tag!("_"), sign)))
-            )
-        ) >>
-        offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
-        align: map!(opt!(complete!(align)), |n| n.unwrap_or_default()) >>
-        opcode: switch!(value!(op),
-            b"i32.load"     => value!(Load::I32(align, offset)) |
-            b"i64.load"     => value!(Load::I64(align, offset)) |
-            b"f32.load"     => value!(Load::F32(align, offset)) |
-            b"f64.load"     => value!(Load::F64(align, offset)) |
-            b"i32.load8_s"  => value!(Load::I8AsI32(align, offset)) |
-            b"i32.load8_u"  => value!(Load::U8AsI32(align, offset)) |
-            b"i32.load16_s" => value!(Load::I16AsI32(align, offset)) |
-            b"i32.load16_u" => value!(Load::U16AsI32(align, offset)) |
-            b"i64.load8_s"  => value!(Load::I8AsI64(align, offset)) |
-            b"i64.load8_u"  => value!(Load::U8AsI64(align, offset)) |
-            b"i64.load16_s" => value!(Load::I16AsI64(align, offset)) |
-            b"i64.load16_u" => value!(Load::U16AsI64(align, offset)) |
-            b"i64.load32_s" => value!(Load::I32AsI64(align, offset)) |
-            b"i64.load32_u" => value!(Load::U32AsI64(align, offset))
-        ) >>
-        ( opcode )
-    )
-);
-
-/// <val_type>.store(8|16|32)? <offset>? <align>?
-#[cfg_attr(rustfmt, rustfmt_skip)]
-named!(
-    pub store<Store>,
-    do_parse!(
-        op: recognize!(tuple!(
-                first!(value_type),
-                tag!(".store"),
-                opt!(complete!(mem_size))
-            )) >>
-        offset: map!(opt!(complete!(offset)), |n| n.unwrap_or_default()) >>
-        align: map!(opt!(complete!(align)), |n| n.unwrap_or_default()) >>
-        opcode: switch!(value!(op),
-            b"i32.store"    => value!(Store::I32(align, offset)) |
-            b"i64.store"    => value!(Store::I64(align, offset)) |
-            b"f32.store"    => value!(Store::F32(align, offset)) |
-            b"f64.store"    => value!(Store::F64(align, offset)) |
-            b"i32.store8"   => value!(Store::I32AsI8(align, offset)) |
-            b"i32.store16"  => value!(Store::I32AsI16(align, offset)) |
-            b"i64.store8"   => value!(Store::I64AsI8(align, offset)) |
-            b"i64.store16"  => value!(Store::I64AsI16(align, offset)) |
-            b"i64.store32"  => value!(Store::I64AsI32(align, offset))
-        ) >>
-        ( opcode )
-    )
-);
-
-/// offset: offset=<nat>
-named!(offset<u32>, map!(preceded!(pair!(OFFSET, EQ), nat32), |n| n as u32));
-
-/// align: align=(1|2|4|8|...)
-named!(
-    align<u32>,
-    verify!(map!(preceded!(pair!(ALIGN, EQ), nat32), |n| n as u32), |n: u32| n == 0
-        || n.is_power_of_two())
-);
-
-named!(
-    mem_size<usize>,
-    map_res!(
-        map_res!(first!(alt!(tag!("8") | tag!("16") | tag!("32"))), str::from_utf8),
-        usize::from_str
-    )
-);
-
 #[cfg(test)]
 mod tests {
     use std::str;
@@ -239,10 +150,13 @@ mod tests {
             (b"br_if $end", Done(&[][..], BrIf(Var::Id("end".to_owned())))),
             (b"br_table 0", Done(&[][..], BrTable(vec![], Var::Index(0)))),
             (
-                b"br_table 0 1 2 3",
+                b"br_table 0 1 2 3 4",
                 Done(
                     &[][..],
-                    BrTable(vec![Var::Index(1), Var::Index(2), Var::Index(3)], Var::Index(0)),
+                    BrTable(
+                        vec![Var::Index(0), Var::Index(1), Var::Index(2), Var::Index(3)],
+                        Var::Index(4),
+                    ),
                 ),
             ),
             (b"return", Done(&[][..], Return)),

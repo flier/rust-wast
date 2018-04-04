@@ -50,6 +50,7 @@ mod tests {
     use std::str;
 
     use nom::IResult::Done;
+    use parity_wasm::elements::{FunctionType, GlobalType, MemoryType, TableType, ValueType::*};
 
     use super::*;
 
@@ -62,6 +63,87 @@ mod tests {
                 inline_import(code),
                 Done(&[][..], (module.to_owned(), field.to_owned())),
                 "parse inline_import: {}",
+                unsafe { str::from_utf8_unchecked(code) }
+            );
+        }
+    }
+
+    #[test]
+    fn parse_import() {
+        let tests: Vec<(&[u8], _)> = vec![
+            (
+                br#"(import "spectest" "print_i32" (func (param i32)))"#,
+                (
+                    None,
+                    Import {
+                        module: "spectest".to_owned(),
+                        name: "print_i32".to_owned(),
+                        desc: ImportDesc::Function(None, Some(FunctionType::new(vec![I32], None))),
+                    },
+                ),
+            ),
+            (
+                br#"(import "test" "func-i64->i64" (func $i64->i64 (param i64) (result i64)))"#,
+                (
+                    Some(Var::Id("i64->i64".to_owned())),
+                    Import {
+                        module: "test".to_owned(),
+                        name: "func-i64->i64".to_owned(),
+                        desc: ImportDesc::Function(None, Some(FunctionType::new(vec![I64], Some(I64)))),
+                    },
+                ),
+            ),
+            (
+                br#"(import "spectest" "table" (table 10 20 anyfunc))"#,
+                (
+                    None,
+                    Import {
+                        module: "spectest".to_owned(),
+                        name: "table".to_owned(),
+                        desc: ImportDesc::Table(TableType::new(10, Some(20))),
+                    },
+                ),
+            ),
+            (
+                br#"(import "spectest" "memory" (memory 1 2))"#,
+                (
+                    None,
+                    Import {
+                        module: "spectest".to_owned(),
+                        name: "memory".to_owned(),
+                        desc: ImportDesc::Memory(MemoryType::new(1, Some(2))),
+                    },
+                ),
+            ),
+            (
+                br#"(import "spectest" "global_i32" (global i32))"#,
+                (
+                    None,
+                    Import {
+                        module: "spectest".to_owned(),
+                        name: "global_i32".to_owned(),
+                        desc: ImportDesc::Global(GlobalType::new(I32, false)),
+                    },
+                ),
+            ),
+            (
+                br#"(import "spectest" "global_i32" (global $x i32))"#,
+                (
+                    Some(Var::Id("x".to_owned())),
+                    Import {
+                        module: "spectest".to_owned(),
+                        name: "global_i32".to_owned(),
+                        desc: ImportDesc::Global(GlobalType::new(I32, false)),
+                    },
+                ),
+            ),
+        ];
+
+        for (code, (module, field)) in tests {
+            assert_eq!(
+                import(code),
+                Done(&[][..], (module.to_owned(), field.to_owned())),
+                "parse import: {}",
                 unsafe { str::from_utf8_unchecked(code) }
             );
         }

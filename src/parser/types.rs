@@ -71,7 +71,7 @@ named!(pub limits<(u32, Option<u32>)>, pair!(first!(nat32), opt!(first!(nat32)))
 
 named!(
     pub memory_type<MemoryType>,
-    map!(pair!(nat32, opt!(first!(nat32))), |(min, max)| MemoryType::new(min, max))
+    map!(pair!(first!(nat32), opt!(first!(nat32))), |(min, max)| MemoryType::new(min, max))
 );
 
 named!(
@@ -87,8 +87,8 @@ named!(pub elem_type, call!(ANYFUNC));
 named!(
     pub global_type<GlobalType>,
     alt!(
-        value_type => { |ty| GlobalType::new(ty, false) } |
-        mut_value_type => { |ty| GlobalType::new(ty, true) }
+        first!(value_type)      => { |ty| GlobalType::new(ty, false) } |
+        first!(mut_value_type)  => { |ty| GlobalType::new(ty, true) }
     )
 );
 

@@ -9,6 +9,8 @@ pub enum WastError {
     OutOfRange(isize),
     #[fail(display = "not found: {}", _0)]
     NotFound(String),
+    #[fail(display = "mismatching label")]
+    MismatchingLabel,
 }
 
 #[repr(u32)]
@@ -41,6 +43,8 @@ pub enum Parsing {
     Data,
     Elem,
     Start,
+
+    MismatchingLabel,
 }
 
 impl From<Parsing> for ErrorKind {

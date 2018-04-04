@@ -87,42 +87,25 @@ named!(
     parsing!(
         BlockInstr,
         alt!(
-            preceded!(BLOCK, tuple!(label, first!(block), END, label)) =>
-            { |(label, (result_type, instrs), _, end_label)|
-                Instr::Block(
-                    label,
-                    result_type,
-                    instrs,
-                )
+            preceded!(BLOCK, tuple!(label, first!(block), preceded!(END, label))) => {
+                |(label, (result_type, instrs), end_label)|
+                Instr::Block(label, result_type, instrs)
             } |
-            preceded!(LOOP, tuple!(label, first!(block), END, label)) =>
-            { |(label, (result_type, instrs), _, end_label)|
-                Instr::Loop(
-                    label,
-                    result_type,
-                    instrs
-                )
+            preceded!(LOOP, tuple!(label, first!(block), preceded!(END, label))) => {
+                |(label, (result_type, instrs), end_label)|
+                Instr::Loop(label, result_type, instrs)
             } |
-            preceded!(IF, tuple!(label, first!(block), END, label)) =>
-            { |(label, (result_type, then_instrs), _, end_label)|
-                Instr::If(
-                    label,
-                    result_type,
-                    then_instrs,
-                    vec![],
-                )
+            preceded!(IF, tuple!(label, first!(block), preceded!(END, label))) => {
+                |(label, (result_type, then_instrs), end_label)|
+                Instr::If(label, result_type, then_instrs, vec![])
             } |
             tuple!(
                 preceded!(IF, tuple!(label, first!(block))),
                 preceded!(ELSE, tuple!(label, instr_list)),
                 preceded!(END, label)
-            ) => { |((label, (block_type, then_instrs)), (else_label, else_instrs), end_label)|
-                Instr::If(
-                    label,
-                    block_type,
-                    then_instrs,
-                    else_instrs,
-                )
+            ) => {
+                |((label, (block_type, then_instrs)), (else_label, else_instrs), end_label)|
+                Instr::If(label, block_type, then_instrs, else_instrs)
             }
         )
     )

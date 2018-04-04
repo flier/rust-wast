@@ -1,6 +1,6 @@
 use parity_wasm::elements::{GlobalType, InitExpr, ValueType};
 
-use super::{bind_var, init_expr, inline_export, inline_import, value_type, GLOBAL, LPAR, MUT, RPAR};
+use super::{opt_bind_var, init_expr, inline_export, inline_import, value_type, GLOBAL, LPAR, MUT, RPAR};
 use ast::{Global, Var};
 
 named!(
@@ -11,7 +11,7 @@ named!(
             LPAR,
             preceded!(
                 GLOBAL,
-                pair!(opt!(first!(bind_var)), first!(global_fields))
+                pair!(opt_bind_var, first!(global_fields))
             ),
             RPAR
         )

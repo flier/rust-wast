@@ -14,7 +14,9 @@ named!(
     )
 );
 
-named!(pub bind_var<Var>, map!(id, |s| Var::Id(s.to_owned())));
+named!(pub opt_bind_var<Option<Var>>, opt!(complete!(first!(bind_var))));
+
+named!(bind_var<Var>, map!(id, |s| Var::Id(s.to_owned())));
 
 #[cfg(test)]
 mod tests {

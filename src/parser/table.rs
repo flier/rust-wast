@@ -1,6 +1,6 @@
 use parity_wasm::elements::TableType;
 
-use super::{bind_var, elem_type, inline_export, inline_import, table_type, var_list, ELEM, LPAR, RPAR, TABLE};
+use super::{opt_bind_var, elem_type, inline_export, inline_import, table_type, var_list, ELEM, LPAR, RPAR, TABLE};
 use ast::{Table, Var};
 
 named!(
@@ -11,7 +11,7 @@ named!(
             LPAR,
             preceded!(
                 TABLE,
-                pair!(opt!(first!(bind_var)), first!(table_fields))
+                pair!(opt_bind_var, first!(table_fields))
             ),
             RPAR
         ))
@@ -21,15 +21,15 @@ named!(
 named!(
     table_fields<Table>,
     alt_complete!(
-        first!(table_type) => { |table_type| Table { table_type, elements: vec![] } } |
-        pair!(first!(inline_import), first!(table_type)) => {
+        table_type => { |table_type| Table { table_type, elements: vec![] } } |
+        pair!(inline_import, first!(table_type)) => {
             |((module_name, item_name), table_type)| Table { table_type, elements: vec![] }
         } |
-        pair!(first!(inline_export), first!(table_fields)) => {
+        pair!(inline_export, first!(table_fields)) => {
             |(export_name, table)| table
         } |
         preceded!(
-            first!(elem_type),
+            elem_type,
             first!(delimited!(
                 LPAR,
                 preceded!(ELEM, var_list),

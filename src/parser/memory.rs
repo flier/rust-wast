@@ -1,6 +1,6 @@
 use parity_wasm::elements::MemoryType;
 
-use super::{bind_var, inline_export, inline_import, memory_type, string_list, DATA, LPAR, MEMORY, RPAR};
+use super::{opt_bind_var, inline_export, inline_import, memory_type, string_list, DATA, LPAR, MEMORY, RPAR};
 use ast::{Memory, Var};
 
 named!(
@@ -11,7 +11,7 @@ named!(
             LPAR,
             preceded!(
                 MEMORY,
-                pair!(opt!(first!(bind_var)), first!(memory_fields))
+                pair!(opt_bind_var, first!(memory_fields))
             ),
             RPAR
         )
@@ -21,11 +21,11 @@ named!(
 named!(
     memory_fields<Memory>,
     alt!(
-        first!(memory_type) => { |memory_type| Memory { memory_type, elements: vec![] } } |
-        pair!(first!(inline_import), first!(memory_type)) => {
+        memory_type => { |memory_type| Memory { memory_type, elements: vec![] } } |
+        pair!(inline_import, first!(memory_type)) => {
             |((module_name, item_name), memory_type)| Memory { memory_type, elements: vec![] }
         } |
-        pair!(first!(inline_export), first!(memory_fields)) => {
+        pair!(inline_export, first!(memory_fields)) => {
             |(export_name, memory)| memory
         } |
         delimited!(

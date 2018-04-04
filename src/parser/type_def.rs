@@ -1,6 +1,6 @@
 use parity_wasm::elements::{FunctionType, ValueType};
 
-use super::{bind_var, value_type, value_type_list, var, FUNC, LPAR, PARAM, RESULT, RPAR, TYPE};
+use super::{opt_bind_var, value_type, value_type_list, var, FUNC, LPAR, PARAM, RESULT, RPAR, TYPE};
 use ast::Var;
 
 named!(
@@ -9,7 +9,7 @@ named!(
         TypeDef,
         delimited!(
             LPAR,
-            preceded!(TYPE, pair!(opt!(first!(bind_var)), first!(def_type))),
+            preceded!(TYPE, pair!(opt_bind_var, first!(def_type))),
             RPAR
         )
     )

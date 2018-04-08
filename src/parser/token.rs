@@ -4,11 +4,6 @@ named!(pub LPAR, first!(tag!("(")));
 named!(pub RPAR, first!(tag!(")")));
 named!(pub EQ, tag!("="));
 
-named!(pub I32, first!(tag!("i32")));
-named!(pub I64, first!(tag!("i64")));
-named!(pub F32, first!(tag!("f32")));
-named!(pub F64, first!(tag!("f64")));
-
 named!(pub ALIGN, first!(tag!("align")));
 named!(pub ANYFUNC, first!(tag!("anyfunc")));
 named!(pub BLOCK, first!(tag!("block")));
@@ -31,6 +26,7 @@ named!(pub GLOBAL, first!(tag!("global")));
 named!(pub GROW_MEMORY, first!(tag!("grow_memory")));
 named!(pub IF, first!(tag!("if")));
 named!(pub IMPORT, first!(tag!("import")));
+named!(pub LOCAL, first!(tag!("local")));
 named!(pub LOOP, first!(tag!("loop")));
 named!(pub MEMORY, first!(tag!("memory")));
 named!(pub MODULE, first!(tag!("module")));

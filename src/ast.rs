@@ -1,6 +1,6 @@
 use std::mem;
 
-use parity_wasm::elements::{BlockType, FunctionType, GlobalType, InitExpr, MemoryType, Opcode, TableType};
+use parity_wasm::elements::{BlockType, FunctionType, GlobalType, InitExpr, MemoryType, Opcode, TableType, ValueType};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Var {
@@ -83,6 +83,64 @@ pub struct Elem {
     pub table_index: Var,
     pub offset: InitExpr,
     pub elements: Vec<Var>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Function {
+    pub func_idx: Option<Var>,
+    pub func_type: Option<FunctionType>,
+    pub locals: Vec<Local>,
+    pub body: Vec<Instr>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Local {
+    pub id: Option<Var>,
+    pub value_type: Option<ValueType>,
+}
+
+impl Local {
+    pub fn new<S: Into<String>>(id: S, value_type: ValueType) -> Self {
+        Local {
+            id: Some(Var::id(id)),
+            value_type: Some(value_type),
+        }
+    }
+
+    pub fn value(value_type: ValueType) -> Self {
+        Local {
+            id: None,
+            value_type: Some(value_type),
+        }
+    }
+
+    pub fn i32() -> Self {
+        Local {
+            id: None,
+            value_type: Some(ValueType::I32),
+        }
+    }
+
+    pub fn i64() -> Self {
+        Local {
+            id: None,
+            value_type: Some(ValueType::I64),
+        }
+    }
+
+    pub fn f32() -> Self {
+        Local {
+            id: None,
+            value_type: Some(ValueType::F32),
+        }
+    }
+
+    pub fn f64() -> Self {
+        Local {
+            id: None,
+            value_type: Some(ValueType::F64),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

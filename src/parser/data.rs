@@ -12,7 +12,7 @@ named!(
                     DATA,
                     tuple!(
                         opt!(first!(var)),
-                        alt_complete!(first!(offset) | first!(init_expr)),
+                        alt!(first!(offset) | first!(init_expr)),
                         string_list
                     )
                 ),

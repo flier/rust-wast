@@ -5,10 +5,9 @@ use ast::Var;
 
 named!(
     pub typeuse<(Option<Var>, Option<FunctionType>)>,
-    parsing!(
-        TypeUse,
+    parsing!(TypeUse,
         pair!(
-            opt!(use_type),
+            opt!(complete!(use_type)),
             func_type
         )
     )

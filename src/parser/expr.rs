@@ -8,7 +8,7 @@ use ast::Instr;
 
 named!(
     pub expr_list<Vec<Instr>>,
-    map!(many0!(first!(expr)), |instrs| itertools::flatten(instrs).collect())
+    map!(many0!(expr), |instrs| itertools::flatten(instrs).collect())
 );
 
 named!(

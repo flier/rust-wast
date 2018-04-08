@@ -21,13 +21,13 @@ named!(
 named!(
     global_fields<Global>,
     alt!(
-        pair!(first!(global_type), first!(init_expr)) => {
+        pair!(global_type, first!(init_expr)) => {
             |(global_type, init_expr)| Global { global_type, init_expr: init_expr }
         } |
-        pair!(first!(inline_import), first!(global_type)) => {
+        pair!(inline_import, first!(global_type)) => {
             |((module_name, item_name), global_type)| Global { global_type, init_expr: InitExpr::new(vec![]) }
         } |
-        pair!(first!(inline_export), first!(global_fields)) => {
+        pair!(inline_export, first!(global_fields)) => {
             |(export_name, global)| global
         }
     )

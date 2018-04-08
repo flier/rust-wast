@@ -13,8 +13,7 @@ named!(
 
 named!(
     pub instr<Vec<Instr>>,
-    parsing!(
-        Instr,
+    parsing!(Instr,
         alt!(
             plain_instr => { |instr| vec![instr] } |
             call_instr => { |instr| vec![instr] } |

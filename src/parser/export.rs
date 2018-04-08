@@ -3,18 +3,22 @@ use ast::{Export, ExportDesc};
 
 named!(
     pub inline_export<String>,
-    delimited!(LPAR, preceded!(EXPORT, first!(string)), RPAR)
+    parsing!(InlineExport,
+        delimited!(LPAR, preceded!(EXPORT, first!(string)), RPAR)
+    )
 );
 
 named!(
     pub export<Export>,
-    map!(
-        delimited!(
-            LPAR,
-            preceded!(EXPORT, tuple!(first!(string), first!(export_desc))),
-            RPAR
-        ),
-        |(name, desc)| Export { name, desc }
+    parsing!(Export,
+        map!(
+            delimited!(
+                LPAR,
+                preceded!(EXPORT, tuple!(first!(string), first!(export_desc))),
+                RPAR
+            ),
+            |(name, desc)| Export { name, desc }
+        )
     )
 );
 
@@ -51,7 +55,10 @@ mod tests {
 
     #[test]
     fn parse_inline_export() {
-        let tests: Vec<(&[u8], _)> = vec![(b"(export \"a\")", "a")];
+        let tests: Vec<(&[u8], _)> = vec![
+            (b"(export \"a\")", "a"),
+            (b"(export \"type-use-7\")", "type-use-7"),
+        ];
 
         for (code, result) in tests {
             assert_eq!(

@@ -1,4 +1,3 @@
-use std::fmt;
 use std::collections::HashMap;
 
 use nom::{ErrorKind, IResult};
@@ -184,9 +183,14 @@ macro_rules! parsing {
         match $submac!($input, $($args)*) {
             ::nom::IResult::Incomplete(needed)  => ::nom::IResult::Incomplete(needed),
             ::nom::IResult::Done(i, o)          => ::nom::IResult::Done(i, o),
-            ::nom::IResult::Error(e)            =>
-                ::nom::IResult::Error(error_node_position!(
-                    ::nom::ErrorKind::Custom($crate::errors::Parsing::$code as u32), $input, e))
+            ::nom::IResult::Error(e)            => {
+                let res = ::nom::IResult::Error(error_node_position!(
+                    ::nom::ErrorKind::Custom($crate::errors::Parsing::$code as u32), $input, e));
+
+                trace_parse_error!($input, res);
+
+                res
+            }
         }
     };
 }

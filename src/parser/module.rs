@@ -4,11 +4,10 @@ use failure::{err_msg, Error};
 use nom::IResult;
 
 use parity_wasm::builder::{signature, ModuleBuilder, TableDefinition, TableEntryDefinition};
-use parity_wasm::elements::{FunctionNameSection, FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type,
-                            TypeSection};
+use parity_wasm::elements::{FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type, TypeSection};
 
-use super::{data, elem, export, global, import, memory, table, typedef, var, LPAR, MODULE, RPAR, START};
-use ast::{Data, Elem, Export, Global, Import, Memory, Table, Var};
+use super::{data, elem, export, func, global, import, memory, table, typedef, var, LPAR, MODULE, RPAR, START};
+use ast::{Data, Elem, Export, Function, Global, Import, Memory, Table, Var};
 use errors::WastError::NotFound;
 
 #[derive(Clone, Debug, Default)]
@@ -17,7 +16,8 @@ pub struct Context {
     pub typedefs: HashMap<String, usize>,
     pub imports: Vec<Import>,
     pub import_names: HashMap<String, usize>,
-    pub funcs: FunctionNameSection,
+    pub funcs: Vec<Function>,
+    pub func_names: HashMap<String, usize>,
     pub tables: Vec<Table>,
     pub table_names: HashMap<String, usize>,
     pub memories: Vec<Memory>,
@@ -69,11 +69,9 @@ impl Resolvable for Table {
             .map(|elem| {
                 match *elem {
                     Var::Index(idx) => Ok(idx),
-                    Var::Id(ref id) => ctxt.funcs
-                        .names()
-                        .iter()
-                        .position(|(_, ref elem)| *elem == id)
-                        .map(|idx| idx as u32)
+                    Var::Id(ref id) => ctxt.func_names
+                        .get(id)
+                        .map(|&idx| idx as u32)
                         .ok_or_else(|| err_msg("undefined element")),
                 }.map(|idx| TableEntryDefinition {
                     offset: InitExpr::empty(),
@@ -208,6 +206,15 @@ named_args!(
 
             if let Some(Var::Id(id)) = bind {
                 ctxt.import_names.insert(id, import_ref);
+            }
+        }} |
+        func => { |(bind, func)| {
+            trace!("func {:?} = {:?}", bind, func);
+
+            let func_ref = ctxt.funcs.get_or_insert(func);
+
+            if let Some(Var::Id(id)) = bind {
+                ctxt.func_names.insert(id, func_ref);
             }
         }} |
         table => { |(bind, table)| {

@@ -19,10 +19,12 @@ mod table;
 mod elem;
 mod import;
 mod export;
+mod func;
 mod module;
 
 pub use self::comment::comment;
 pub use self::data::data;
+pub use self::func::func;
 pub use self::elem::elem;
 pub use self::export::{export, inline_export};
 pub use self::expr::{expr, expr_list, init_expr, offset};

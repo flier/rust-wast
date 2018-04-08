@@ -191,14 +191,13 @@ macro_rules! parsing {
     };
 }
 
-pub fn trace_parse_error<O: Clone + fmt::Debug>(input: &[u8], res: IResult<&[u8], O>) {
-    if let Some(v) = prepare_errors(input, res.clone()) {
+pub fn trace_parse_error<O>(input: &[u8], res: IResult<&[u8], O>) {
+    if let Some(v) = prepare_errors(input, res) {
         let colors = generate_colors(&v);
 
         trace!(
-            "parser {} failed\n{:?}\n{}",
+            "parser failed: {}\n{}",
             print_codes(colors, PARSING_VALUES.clone()),
-            res,
             print_offsets(input, 0, &v)
         );
     }

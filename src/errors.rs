@@ -21,6 +21,7 @@ pub enum Parsing {
     Assertion,
     Block,
     BlockInstr,
+    Cmd,
     Comment,
     Data,
     Elem,
@@ -42,6 +43,8 @@ pub enum Parsing {
     Integer,
     Local,
     Memory,
+    Meta,
+    Module,
     Nat,
     Nat32,
     Num,
@@ -142,6 +145,7 @@ lazy_static! {
         values.insert(Parsing::Assertion as u32, "assert");
         values.insert(Parsing::Block as u32, "block");
         values.insert(Parsing::BlockInstr as u32, "block_instr");
+        values.insert(Parsing::Cmd as u32, "cmd");
         values.insert(Parsing::Comment as u32, "comment");
         values.insert(Parsing::Data as u32, "data");
         values.insert(Parsing::Elem as u32, "elem");
@@ -163,6 +167,8 @@ lazy_static! {
         values.insert(Parsing::Integer as u32, "int");
         values.insert(Parsing::Local as u32, "local");
         values.insert(Parsing::Memory as u32, "memory");
+        values.insert(Parsing::Meta as u32, "meta");
+        values.insert(Parsing::Module as u32, "module");
         values.insert(Parsing::Nat as u32, "nat");
         values.insert(Parsing::Nat32 as u32, "nat32");
         values.insert(Parsing::Num as u32, "num");

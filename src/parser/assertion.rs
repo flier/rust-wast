@@ -4,7 +4,7 @@ use super::{const_list, name, opt_bind_var, string, string_list, ASSERT_EXHAUSTI
 use ast::{Action, Assertion, ScriptModule};
 
 named!(
-    script_module<ScriptModule>,
+    pub script_module<ScriptModule>,
     delimited!(
         LPAR,
         preceded!(
@@ -29,7 +29,7 @@ named!(
 );
 
 named!(
-    action<Action>,
+    pub action<Action>,
     parsing!(
         Action,
         delimited!(

@@ -144,6 +144,20 @@ impl Local {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum ModuleField {
+    TypeDef(Option<Var>, FunctionType),
+    Import(Option<Var>, Import),
+    Function(Option<Var>, Function),
+    Table(Option<Var>, Table),
+    Memory(Option<Var>, Memory),
+    Global(Option<Var>, Global),
+    Export(Export),
+    Start(Var),
+    Element(Elem),
+    Data(Data),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Assertion {
     Malformed(ScriptModule, String),
     Invalid(ScriptModule, String),
@@ -165,6 +179,28 @@ pub enum ScriptModule {
 pub enum Action {
     Invoke(Option<Var>, String, Vec<Constant>),
     Get(Option<Var>, String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Cmd {
+    Action(Action),
+    Assertion(Assertion),
+    ScriptModule(ScriptModule),
+    Register(String, Option<Var>),
+    Meta(Meta),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Meta {
+    Script(Option<Var>, Vec<Cmd>),
+    Input(Option<Var>, String),
+    Output(Option<Var>, Option<String>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Script {
+    Commands(Vec<Cmd>),
+    InlineModule(Vec<ModuleField>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

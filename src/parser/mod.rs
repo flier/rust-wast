@@ -20,6 +20,7 @@ mod elem;
 mod import;
 mod export;
 mod func;
+mod start;
 mod module;
 
 pub use self::comment::comment;
@@ -36,6 +37,7 @@ pub use self::module::{funcidx, globalidx, labelidx, localidx, memidx, module, t
 pub use self::ops::{binary, compare, constant, convert, load, sign, store, test, unary};
 pub use self::skip::skip;
 pub use self::table::table;
+pub use self::start::start;
 pub use self::token::*;
 pub use self::typedef::typedef;
 pub use self::types::{elem_type, float_type, func_type, global_type, int_type, limits, memory_type, table_type,

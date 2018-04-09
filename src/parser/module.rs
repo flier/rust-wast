@@ -6,7 +6,7 @@ use nom::IResult;
 use parity_wasm::builder::{signature, ModuleBuilder, TableDefinition, TableEntryDefinition};
 use parity_wasm::elements::{FunctionType, GlobalEntry, InitExpr, Module, NameMap, Type, TypeSection};
 
-use super::{data, elem, export, func, global, import, memory, table, typedef, var, LPAR, MODULE, RPAR, START};
+use super::{data, elem, export, func, global, import, memory, start, table, typedef, var, LPAR, MODULE, RPAR};
 use ast::{Data, Elem, Export, Function, Global, Import, Memory, Table, Var};
 use errors::WastError::NotFound;
 
@@ -266,30 +266,3 @@ named_args!(
         }}
     )
 );
-
-named!(start<Var>, delimited!(LPAR, preceded!(START, first!(var)), RPAR));
-
-#[cfg(test)]
-mod tests {
-    use std::str;
-
-    use super::*;
-
-    #[test]
-    fn parse_start() {
-        let tests: Vec<(&[u8], _)> = vec![
-            (b"(start $main)", Var::Id("main".to_owned())),
-            (b"(start 2)", Var::Index(2)),
-        ];
-
-        for (code, ref value) in tests {
-            let res = start(code);
-
-            trace_parse_error!(code, res);
-
-            assert_eq!(res, IResult::Done(&[][..], value.clone()), "parse start: {}", unsafe {
-                str::from_utf8_unchecked(code)
-            });
-        }
-    }
-}

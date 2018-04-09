@@ -25,22 +25,23 @@ mod module;
 mod assertion;
 mod script;
 
-pub use self::assertion::{action, script_module, assertion};
+pub use self::assertion::{action, assertion, script_module};
 pub use self::comment::comment;
 pub use self::data::data;
-pub use self::func::func;
 pub use self::elem::elem;
 pub use self::export::{export, inline_export};
 pub use self::expr::{const_list, expr, expr_list, init_expr, offset};
+pub use self::func::func;
 pub use self::global::global;
 pub use self::import::{import, inline_import};
 pub use self::instr::{block, block_type, call_instr, instr_list, label, plain_instr};
 pub use self::memory::memory;
-pub use self::module::{funcidx, inline_module, inline_module1, globalidx, labelidx, localidx, memidx, module, tableidx, typeidx};
+pub use self::module::{funcidx, globalidx, inline_module, labelidx, localidx, memidx, module, tableidx, typeidx,
+                       inline_module1};
 pub use self::ops::{binary, compare, constant, convert, load, sign, store, test, unary};
 pub use self::skip::skip;
-pub use self::table::table;
 pub use self::start::start;
+pub use self::table::table;
 pub use self::token::*;
 pub use self::typedef::typedef;
 pub use self::types::{elem_type, float_type, func_type, global_type, int_type, limits, memory_type, table_type,

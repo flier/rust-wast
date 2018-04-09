@@ -1,6 +1,6 @@
 use super::{action, assertion, name, opt_bind_var, script_module, string, inline_module1, INPUT, LPAR, OUTPUT,
             REGISTER, RPAR, SCRIPT};
-use ast::{Cmd, Meta, Var, Script};
+use ast::{Cmd, Meta, Script, Var};
 
 named!(script_var_opt<Option<Var>>, call!(opt_bind_var));
 
@@ -16,7 +16,8 @@ named!(cmd_list<Vec<Cmd>>, many0!(first!(cmd)));
 
 named!(
     cmd<Cmd>,
-    parsing!(Cmd,
+    parsing!(
+        Cmd,
         alt!(
             action          => { |action|        Cmd::Action(action) } |
             assertion       => { |assertion|     Cmd::Assertion(assertion) } |
@@ -29,16 +30,13 @@ named!(
 
 named!(
     register<(String, Option<Var>)>,
-    delimited!(
-        LPAR,
-        preceded!(REGISTER, tuple!(first!(name), opt_bind_var)),
-        RPAR
-    )
+    delimited!(LPAR, preceded!(REGISTER, tuple!(first!(name), opt_bind_var)), RPAR)
 );
 
 named!(
     meta<Meta>,
-    parsing!(Meta,
+    parsing!(
+        Meta,
         delimited!(
             LPAR,
             alt!(

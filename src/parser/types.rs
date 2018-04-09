@@ -45,7 +45,8 @@ named!(
 
 named!(
     param<Vec<(Option<Var>, ValueType)>>,
-    parsing!(Param,
+    parsing!(
+        Param,
         delimited!(
             LPAR,
             preceded!(

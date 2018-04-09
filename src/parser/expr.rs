@@ -1,9 +1,9 @@
-use itertools;
 use failure::Error;
+use itertools;
 use parity_wasm::elements::{BlockType, InitExpr, Opcode};
 
-use super::{block, block_type, call_instr, constant, instr_list, label, plain_instr, BLOCK, ELSE, IF, LOOP,
-            LPAR, OFFSET, RPAR, THEN};
+use super::{block, block_type, call_instr, constant, instr_list, label, plain_instr, BLOCK, ELSE, IF, LOOP, LPAR,
+            OFFSET, RPAR, THEN};
 use ast::{Constant, Instr};
 
 named!(

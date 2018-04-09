@@ -79,8 +79,8 @@ mod tests {
     use std::str;
 
     use nom::IResult::Done;
-    use pretty_env_logger;
     use parity_wasm::elements::{FunctionType, ValueType::*};
+    use pretty_env_logger;
 
     use super::*;
     use ast::{Constant, Instr};

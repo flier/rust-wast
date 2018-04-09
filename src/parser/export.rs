@@ -55,10 +55,7 @@ mod tests {
 
     #[test]
     fn parse_inline_export() {
-        let tests: Vec<(&[u8], _)> = vec![
-            (b"(export \"a\")", "a"),
-            (b"(export \"type-use-7\")", "type-use-7"),
-        ];
+        let tests: Vec<(&[u8], _)> = vec![(b"(export \"a\")", "a"), (b"(export \"type-use-7\")", "type-use-7")];
 
         for (code, result) in tests {
             assert_eq!(

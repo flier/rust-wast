@@ -345,7 +345,14 @@ mod tests {
             (b"0x1p127", Done(&[][..], 1.0e127)),
             (b"inf", Done(&[][..], f64::INFINITY)),
             (b"-inf", Done(&[][..], -f64::INFINITY)),
-            (b"", Error(NodePosition(Custom(Floating as u32), &[][..], vec![Position(Alt, &[][..])]))),
+            (
+                b"",
+                Error(NodePosition(
+                    Custom(Floating as u32),
+                    &[][..],
+                    vec![Position(Alt, &[][..])],
+                )),
+            ),
         ];
 
         for (code, ref result) in tests {

@@ -1,6 +1,6 @@
 use super::{data, elem, export, func, global, import, memory, opt_bind_var, start, table, typedef, var, LPAR, MODULE,
             RPAR};
-use ast::{Var, ModuleField};
+use ast::{ModuleField, Var};
 
 named!(pub typeidx<Var>, first!(var));
 named!(pub funcidx<Var>, first!(var));

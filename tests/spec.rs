@@ -2,9 +2,9 @@
 extern crate log;
 extern crate pretty_env_logger;
 
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Read;
-use std::ffi::OsStr;
 
 #[test]
 fn parse_spec() {

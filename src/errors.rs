@@ -17,6 +17,8 @@ pub enum WastError {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Parsing {
     Begin = 128,
+    Action,
+    Assertion,
     Block,
     BlockInstr,
     Comment,
@@ -136,6 +138,8 @@ lazy_static! {
         values.insert(error_to_u32::<u32>(&ErrorKind::Verify), "verify");
         values.insert(error_to_u32::<u32>(&ErrorKind::TakeTill1), "take_till1");
 
+        values.insert(Parsing::Action as u32, "action");
+        values.insert(Parsing::Assertion as u32, "assert");
         values.insert(Parsing::Block as u32, "block");
         values.insert(Parsing::BlockInstr as u32, "block_instr");
         values.insert(Parsing::Comment as u32, "comment");

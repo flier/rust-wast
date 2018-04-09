@@ -32,11 +32,11 @@ named!(
             LPAR,
             preceded!(DATA, string_list),
             RPAR
-        ) => { |strs: Vec<String>|
+        ) => { |data: Vec<String>|
         {
-            let elements = strs.into_iter().fold(vec![], |mut value, s| {
-                value.extend_from_slice(s.as_bytes());
-                value
+            let elements = data.into_iter().fold(vec![], |mut v, s| {
+                v.extend_from_slice(s.as_bytes());
+                v
             });
 
             Memory{

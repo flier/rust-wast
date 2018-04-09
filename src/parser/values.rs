@@ -1,5 +1,5 @@
 use std::{char, str, f32, f64, i32, i64};
-use std::iter::FromIterator;
+use std::iter::{Extend, FromIterator};
 use std::str::FromStr;
 
 use nom;
@@ -97,25 +97,34 @@ named!(
 named!(
     pub float<String>,
     parsing!(Floating,
-        map!(pair!(opt!(sign), alt_complete!(
-            preceded!(
-                tag!("0x"),
-                tuple!(
-                    map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)),
-                    opt!(tag!(".")),
-                    opt!(complete!(map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)))),
-                    opt!(complete!(preceded!(tag_no_case!("p"), num)))
-                )
+        alt!(
+            map!(
+                pair!(opt!(sign), alt_complete!(
+                    tag!("inf") => { |_| "inf" } |
+                    tuple!(tag!("nan"), opt!(complete!(pair!(tag!(":0x"), hexnum)))) => { |_| "NaN" }
+                )),
+                |(sign, num)| format!("{}{}", sign.unwrap_or_default(), num)
             ) |
-            tuple!(
-                map_res!(num, |s: String| isize::from_str(&s)),
-                opt!(tag!(".")),
-                opt!(complete!(map_res!(num, |s: String| isize::from_str(&s)))),
-                opt!(complete!(preceded!(tag_no_case!("e"), num)))
-            )
-        )), |(sign, (num, _, frac, exp)): (Option<&str>, (isize, _, Option<isize>, Option<String>))| {
-            format!("{}{}.{}e{}", sign.unwrap_or_default(), num, frac.unwrap_or(0), exp.unwrap_or("0".to_owned()))
-        })
+            map!(pair!(opt!(sign), alt_complete!(
+                preceded!(
+                    tag!("0x"),
+                    tuple!(
+                        map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)),
+                        opt!(tag!(".")),
+                        opt!(complete!(map_res!(hexnum, |s: String| isize::from_str_radix(&s, 16)))),
+                        opt!(complete!(preceded!(tag_no_case!("p"), num)))
+                    )
+                ) |
+                tuple!(
+                    map_res!(num, |s: String| isize::from_str(&s)),
+                    opt!(tag!(".")),
+                    opt!(complete!(map_res!(num, |s: String| isize::from_str(&s)))),
+                    opt!(complete!(preceded!(tag_no_case!("e"), num)))
+                )
+            )), |(sign, (num, _, frac, exp)): (Option<&str>, (isize, _, Option<isize>, Option<String>))| {
+                format!("{}{}.{}e{}", sign.unwrap_or_default(), num, frac.unwrap_or(0), exp.unwrap_or("0".to_owned()))
+            })
+        )
     )
 );
 
@@ -172,6 +181,10 @@ named!(
             )
         ))
     )
+);
+
+named!(
+    pub name<String>, call!(string)
 );
 
 named!(
@@ -330,14 +343,9 @@ mod tests {
             (b"-0x123.456", Done(&[][..], -291.111)),
             (b"-0x123.", Done(&[][..], -291.0)),
             (b"0x1p127", Done(&[][..], 1.0e127)),
-            (
-                b"",
-                Error(NodePosition(
-                    Custom(Floating as u32),
-                    &[][..],
-                    vec![Position(Alt, &[][..])],
-                )),
-            ),
+            (b"inf", Done(&[][..], f64::INFINITY)),
+            (b"-inf", Done(&[][..], -f64::INFINITY)),
+            (b"", Error(NodePosition(Custom(Floating as u32), &[][..], vec![Position(Alt, &[][..])]))),
         ];
 
         for (code, ref result) in tests {
@@ -345,6 +353,9 @@ mod tests {
                 str::from_utf8_unchecked(code)
             });
         }
+
+        assert!(float32(b"nan").unwrap().1.is_nan());
+        assert!(float32(b"-nan").unwrap().1.is_nan());
     }
 
     #[test]

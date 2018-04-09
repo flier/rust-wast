@@ -144,6 +144,30 @@ impl Local {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum Assertion {
+    Malformed(ScriptModule, String),
+    Invalid(ScriptModule, String),
+    Unlinkable(ScriptModule, String),
+    Return(Action, Vec<Constant>),
+    ReturnCanonicalNan(Action),
+    ReturnArithmeticNan(Action),
+    Trap(Action, String),
+    Exhaustion(Action, String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ScriptModule {
+    Encoded(Option<Var>, Vec<u8>),
+    Quoted(Option<Var>, String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Action {
+    Invoke(Option<Var>, String, Vec<Constant>),
+    Get(Option<Var>, String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Instr {
     /// trap unconditionally
     Unreachable,

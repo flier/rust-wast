@@ -22,13 +22,15 @@ mod export;
 mod func;
 mod start;
 mod module;
+mod assertion;
 
+pub use self::assertion::assertion;
 pub use self::comment::comment;
 pub use self::data::data;
 pub use self::func::func;
 pub use self::elem::elem;
 pub use self::export::{export, inline_export};
-pub use self::expr::{expr, expr_list, init_expr, offset};
+pub use self::expr::{const_list, expr, expr_list, init_expr, offset};
 pub use self::global::global;
 pub use self::import::{import, inline_import};
 pub use self::instr::{block, block_type, call_instr, instr_list, label, plain_instr};
@@ -43,6 +45,6 @@ pub use self::typedef::typedef;
 pub use self::types::{elem_type, float_type, func_type, global_type, int_type, limits, memory_type, table_type,
                       value_type, value_type_list};
 pub use self::typeuse::typeuse;
-pub use self::values::{float, id, int, nat, string, string_list, float32, float64, int32, int64, nat32};
+pub use self::values::{float, id, int, name, nat, string, string_list, float32, float64, int32, int64, nat32};
 pub use self::var::{opt_bind_var, var, var_list};
 pub use self::whitespace::whitespace;

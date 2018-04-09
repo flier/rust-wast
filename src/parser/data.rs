@@ -18,13 +18,13 @@ named!(
                 ),
                 RPAR
             ),
-            |(mem_index, offset, strs)| Data {
+            |(mem_index, offset, data)| Data {
                 mem_index: mem_index.unwrap_or(Var::Index(0)),
                 offset,
-                value: strs.into_iter().fold(vec![], |mut value, s| {
-                    value.extend_from_slice(s.as_bytes());
-                    value
-                }),
+                value: data.into_iter().fold(vec![], |mut v, s| {
+                            v.extend_from_slice(s.as_bytes());
+                            v
+                        }),
             }
         ))
     )

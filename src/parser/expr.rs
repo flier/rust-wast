@@ -1,10 +1,10 @@
-use failure::Error;
 use itertools;
+use failure::Error;
 use parity_wasm::elements::{BlockType, InitExpr, Opcode};
 
-use super::{block, block_type, call_instr, instr_list, label, plain_instr, BLOCK, ELSE, IF, LOOP, LPAR, OFFSET, RPAR,
-            THEN};
-use ast::Instr;
+use super::{block, block_type, call_instr, constant, instr_list, label, plain_instr, BLOCK, ELSE, IF, LOOP,
+            LPAR, OFFSET, RPAR, THEN};
+use ast::{Constant, Instr};
 
 named!(
     pub expr_list<Vec<Instr>>,
@@ -71,12 +71,8 @@ named!(
     if_<(Vec<Instr>, Vec<Instr>, Option<Vec<Instr>>)>,
     tuple!(
         first!(expr),
-        delimited!(first!(LPAR), preceded!(THEN, first!(instr_list)), first!(RPAR)),
-        opt!(delimited!(
-            first!(LPAR),
-            preceded!(ELSE, first!(instr_list)),
-            first!(RPAR)
-        ))
+        delimited!(LPAR, preceded!(THEN, first!(instr_list)), RPAR),
+        opt!(delimited!(LPAR, preceded!(ELSE, first!(instr_list)), RPAR))
     )
 );
 
@@ -94,6 +90,8 @@ named!(
         Ok(InitExpr::new(opcodes))
     })
 );
+
+named!(pub const_list<Vec<Constant>>, many0!(delimited!(LPAR, first!(constant), RPAR)));
 
 named!(
     pub offset<InitExpr>,
